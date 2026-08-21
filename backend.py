@@ -129,3 +129,68 @@ def delete_product(product_id):
     connection.close()
 
     return deleted > 0
+
+# ==========================================================
+# SEARCH PRODUCTS
+# ==========================================================
+
+def search_products(keyword):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    query = """
+    SELECT
+        product_id,
+        name,
+        category,
+        selling_price,
+        stock
+    FROM products
+    WHERE
+        name LIKE %s
+        OR category LIKE %s
+    ORDER BY name ASC
+    """
+
+    search_keyword = f"%{keyword}%"
+
+    cursor.execute(
+        query,
+        (search_keyword, search_keyword)
+    )
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return products
+
+# ==========================================================
+# GET PRODUCTS FOR BILLING
+# ==========================================================
+
+def get_products_for_billing():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    query = """
+    SELECT
+        product_id,
+        name,
+        selling_price,
+        stock
+    FROM products
+    ORDER BY name ASC
+    """
+
+    cursor.execute(query)
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return products

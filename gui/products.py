@@ -5,7 +5,8 @@ from backend import (
     add_product,
     update_product,
     delete_product,
-    get_product_by_id
+    get_product_by_id,
+    search_products
 )
 
 
@@ -44,12 +45,18 @@ class ProductsPage(ctk.CTkFrame):
 
         self.search_entry = ctk.CTkEntry(
             toolbar,
-            placeholder_text="Search product by name...",
+            placeholder_text="Search product by name or category...",
             width=300,
             height=38
-        )
+        )       
+
         self.search_entry.pack(side="left")
 
+        # Search while typing
+        self.search_entry.bind(
+            "<KeyRelease>",
+            self.search_products_event
+            )
         self.refresh_button = ctk.CTkButton(
             toolbar,
             text="Refresh",
@@ -464,8 +471,8 @@ class ProductsPage(ctk.CTkFrame):
         ).pack(pady=15)
 
     # ==========================================================
-# DELETE PRODUCT POPUP
-# ==========================================================
+    # DELETE PRODUCT POPUP
+    # ==========================================================
 
     def open_delete_product_popup(self):
 
@@ -504,4 +511,36 @@ class ProductsPage(ctk.CTkFrame):
             messagebox.showerror(
                 "Error",
                 "Unable to delete the selected product."
+            )
+
+    # ==========================================================
+    # LIVE SEARCH PRODUCTS
+    # ==========================================================
+
+    def search_products_event(self, event=None):
+
+        keyword = self.search_entry.get().strip().lower()
+
+        # Empty search -> show everything
+        if keyword == "":
+            self.load_products()
+            return
+
+        products = search_products(keyword)
+
+        # Clear table
+        for row in self.table.get_children():
+            self.table.delete(row)
+
+        # Update product count
+        self.count_label.configure(
+            text=f"{len(products)} Products Found"
+        )
+
+        # Insert filtered products
+        for product in products:
+            self.table.insert(
+                "",
+                "end",
+                values=product
             )
