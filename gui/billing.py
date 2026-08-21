@@ -4,13 +4,15 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 
+
 from backend import (
     get_products_for_billing,
     get_or_create_customer,
     get_customer_by_phone,
     create_sale,
     add_sale_items,
-    update_stock_after_sale
+    update_stock_after_sale,
+    add_loyalty_points
 )
 
 from invoice import generate_invoice
@@ -27,6 +29,8 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ---------------- Billing Data ----------------
         self.cart = []              # Temporary billing cart
         self.products_data = {}     # Product lookup dictionary
+
+        self.customer_id = None
 
         # Build UI
         self.build_ui()
@@ -59,6 +63,43 @@ class BillingPage(ctk.CTkScrollableFrame):
         if product_names:
             self.product_combo.configure(values=product_names)
             self.product_combo.set(product_names[0])
+
+    # ==========================================================
+    #FETCH CUSTOMER DETAILS
+    # ==========================================================
+
+    def fetch_customer_details(self, event=None):
+
+        phone = self.phone_var.get().strip()
+
+        # Wait until phone number is complete
+        if len(phone) != 10:
+            self.customer_name_var.set("")
+            self.points_var.set("⭐ Loyalty Points : 0")
+            self.customer_id = None
+            return
+
+        customer = get_customer_by_phone(phone)
+
+        if customer:
+
+            self.customer_id = customer["customer_id"]
+
+            self.customer_name_var.set(customer["name"])
+
+            self.points_var.set(
+                f"⭐ Loyalty Points : {customer['loyalty_points']}"
+            )
+
+        else:
+
+            self.customer_id = None
+
+            self.customer_name_var.set("")
+
+            self.points_var.set(
+                "⭐ Loyalty Points : New Customer"
+            )
 
     # ==========================================================
     # FETCH CUSTOMER FROM PHONE NUMBER
@@ -293,31 +334,24 @@ class BillingPage(ctk.CTkScrollableFrame):
 
     def calculate_summary(self, subtotal):
 
-        # Read discount %
-        try:
-            discount_percent = float(self.discount_percent_var.get())
+        discount_percent = float(self.discount_percent_var.get() or 0)
 
-            if discount_percent < 0:
-                discount_percent = 0
+        discount = subtotal * discount_percent / 100
 
-            if discount_percent > 100:
-                discount_percent = 100
-
-        except ValueError:
-            discount_percent = 0
-
-        # Calculate discount
-        discount_amount = subtotal * (discount_percent / 100)
-
-        taxable_amount = subtotal - discount_amount
+        taxable_amount = subtotal - discount
 
         gst = taxable_amount * 0.18
 
         grand_total = taxable_amount + gst
 
-        # Update UI
+        # Save values for Generate Bill
+        self.current_subtotal = subtotal
+        self.current_discount = discount
+        self.current_gst = gst
+        self.current_total = grand_total
+
         self.subtotal_var.set(f"₹{subtotal:.2f}")
-        self.discount_var.set(f"₹{discount_amount:.2f}")
+        self.discount_var.set(f"₹{discount:.2f}")
         self.gst_var.set(f"₹{gst:.2f}")
         self.total_var.set(f"₹{grand_total:.2f}")
 
@@ -379,6 +413,15 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ---------------- Update Stock ----------------
         update_stock_after_sale(self.cart)
 
+        # ---------------- Loyalty Points ----------------
+        earned_points = add_loyalty_points(
+            customer_id,
+            grand_total
+        )
+
+        # Refresh loyalty label immediately
+        self.fetch_customer_details()
+
         # ---------------- Generate Invoice PDF ----------------
         invoice_path = generate_invoice(
             sale_id=sale_id,
@@ -395,7 +438,12 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ---------------- Success Popup ----------------
         messagebox.showinfo(
             "Bill Generated Successfully",
-            f"Invoice Saved Successfully!\n\n{invoice_path}"
+            f"""Invoice Saved Successfully!
+
+            ⭐ Loyalty Points Earned: {earned_points}
+
+                Invoice:
+                {invoice_path}"""
         )
 
         # ---------------- Reset Billing Screen ----------------
@@ -407,6 +455,9 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.payment_method_var.set("Cash")
         self.quantity_var.set("1")
         self.discount_percent_var.set("0")
+        self.points_var.set("⭐ Loyalty Points : 0")
+        self.customer_id = None
+
     # ==========================================================
     # BUILD USER INTERFACE
     # ==========================================================
@@ -470,7 +521,11 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         self.phone_entry.grid(
             row=2, column=0, padx=20, pady=(5, 15), sticky="ew")
-        self.phone_entry.bind("<KeyRelease>", self.fetch_customer)
+
+        self.phone_entry.bind(
+        "<KeyRelease>",
+        self.fetch_customer_details
+        )
 
         # Name
         ctk.CTkLabel(customer_frame, text="Customer Name").grid(
@@ -500,6 +555,24 @@ class BillingPage(ctk.CTkScrollableFrame):
             padx=20,
             pady=(0,15),
             sticky="w"
+        )
+
+        # Loyalty Points Display
+        self.points_var = ctk.StringVar(value="⭐ Loyalty Points : 0")
+
+        self.points_label = ctk.CTkLabel(
+            customer_frame,
+            textvariable=self.points_var,
+            font=("Poppins", 13, "bold"),
+            text_color="#F59E0B"
+        )
+
+        self.points_label.grid(
+            row=3,
+            column=1,
+            sticky="w",
+            padx=20,
+            pady=(0,15)
         )
 
         # Payment Method
@@ -791,7 +864,6 @@ class BillingPage(ctk.CTkScrollableFrame):
             height=45,
             font=("Poppins", 15, "bold"),
             command=self.generate_bill
-
         )
 
         self.generate_button.grid(

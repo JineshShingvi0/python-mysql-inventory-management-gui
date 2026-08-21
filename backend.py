@@ -224,6 +224,53 @@ def get_customer_by_phone(phone):
     return customer
 
 # ==========================================================
+# ADD LOYALTY POINTS
+# ==========================================================
+
+def add_loyalty_points(customer_id, bill_amount):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    # 1 point for every ₹100
+    earned_points = int(bill_amount // 100)
+
+    cursor.execute("""
+        UPDATE customers
+        SET loyalty_points = loyalty_points + %s
+        WHERE customer_id = %s
+    """, (earned_points, customer_id))
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+    return earned_points
+
+
+# ==========================================================
+# GET LOYALTY POINTS
+# ==========================================================
+
+def get_loyalty_points(customer_id):
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT loyalty_points
+        FROM customers
+        WHERE customer_id = %s
+    """, (customer_id,))
+
+    result = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return result["loyalty_points"] if result else 0
+# ==========================================================
 # CREATE CUSTOMER IF NOT EXISTS
 # ==========================================================
 
@@ -452,7 +499,7 @@ def get_all_customers():
             address,
             loyalty_points
         FROM customers
-        ORDER BY name
+        ORDER BY customer_id ASC
     """)
 
     customers = cursor.fetchall()
@@ -563,3 +610,63 @@ def delete_customer(customer_id):
     cursor.close()
     connection.close()
 
+# ==========================================================
+# CUSTOMER SUMMARY
+# ==========================================================
+
+def get_customer_summary(customer_id):
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT
+            c.customer_id,
+            c.name,
+            c.phone,
+            c.loyalty_points,
+            COUNT(s.sale_id) AS total_orders,
+            COALESCE(SUM(s.total_amount),0) AS total_spent,
+            MAX(s.sale_date) AS last_purchase
+        FROM customers c
+        LEFT JOIN sales s
+            ON c.customer_id = s.customer_id
+        WHERE c.customer_id = %s
+        GROUP BY c.customer_id
+    """, (customer_id,))
+
+    summary = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return summary
+
+# ==========================================================
+# CUSTOMER PURCHASE HISTORY
+# ==========================================================
+
+def get_customer_purchase_history(customer_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            sale_id,
+            sale_date,
+            payment_method,
+            discount_amount,
+            gst_amount,
+            total_amount
+        FROM sales
+        WHERE customer_id = %s
+        ORDER BY sale_date DESC
+    """, (customer_id,))
+
+    history = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return history

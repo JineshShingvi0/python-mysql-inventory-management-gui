@@ -5,7 +5,9 @@ from backend import (
     search_customers,
     add_customer,
     update_customer,
-    delete_customer
+    delete_customer,
+    get_customer_summary,
+    get_customer_purchase_history
 )
 
 
@@ -101,10 +103,24 @@ class CustomersPage(ctk.CTkFrame):
         )
         self.delete_button.pack(side="right", padx=10)
 
-        # ================= Customer Table =================
+        # ==========================================================
+        # MAIN CONTENT (TABLE + PROFILE)
+        # ==========================================================
 
-        table_frame = ctk.CTkFrame(self)
-        table_frame.pack(fill="both", expand=True, padx=30, pady=10)
+        main_frame = ctk.CTkFrame(self, fg_color="transparent")
+        main_frame.pack(fill="both", expand=True, padx=30, pady=10)
+
+        # Customer table (60%)
+        main_frame.grid_columnconfigure(0, weight=6)
+
+        # Profile panel (40%)
+        main_frame.grid_columnconfigure(1, weight=4, minsize=360)
+
+        main_frame.grid_rowconfigure(0, weight=1)
+
+        # Left Side → Customer Table
+        table_frame = ctk.CTkFrame(main_frame)
+        table_frame.grid(row=0, column=0, sticky="nsew", padx=(0,15))
 
         columns = (
             "ID",
@@ -132,6 +148,8 @@ class CustomersPage(ctk.CTkFrame):
         self.table.column("Address", width=260)
         self.table.column("Points", width=90, anchor="center")
 
+        self.table.bind("<<TreeviewSelect>>", self.load_customer_profile)
+
         scrollbar = ttk.Scrollbar(
             table_frame,
             orient="vertical",
@@ -142,6 +160,115 @@ class CustomersPage(ctk.CTkFrame):
 
         self.table.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+        # ==========================================================
+        # CUSTOMER PROFILE PANEL
+        # ==========================================================
+
+        profile_frame = ctk.CTkFrame(
+            main_frame,
+            fg_color="white",
+            corner_radius=18,
+            border_width=1,
+            border_color="#D1D5DB"
+        )
+
+        profile_frame.grid(row=0, column=1, sticky="nsew")
+
+        ctk.CTkLabel(
+            profile_frame,
+            text="Customer Profile",
+            font=("Poppins",20,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w", padx=20, pady=(20,15))
+
+        # Variables
+        self.profile_name = ctk.StringVar(value="--")
+        self.profile_phone = ctk.StringVar(value="--")
+        self.profile_points = ctk.StringVar(value="0")
+        self.profile_orders = ctk.StringVar(value="0")
+        self.profile_spent = ctk.StringVar(value="₹0.00")
+        self.profile_last_purchase = ctk.StringVar(value="--")
+
+
+        def profile_row(title, variable):
+
+            row = ctk.CTkFrame(profile_frame, fg_color="transparent")
+            row.pack(fill="x", padx=20, pady=8)
+
+            ctk.CTkLabel(
+                row,
+                text=title,
+                font=("Poppins",13)
+            ).pack(side="left")
+
+            ctk.CTkLabel(
+                row,
+                textvariable=variable,
+                font=("Poppins",13,"bold"),
+                text_color="#065F46"
+            ).pack(side="right")
+
+
+        profile_row("Name", self.profile_name)
+        profile_row("Phone", self.profile_phone)
+        profile_row("Loyalty Points ⭐", self.profile_points)
+        profile_row("Total Orders", self.profile_orders)
+        profile_row("Total Spent", self.profile_spent)
+        profile_row("Last Purchase", self.profile_last_purchase)
+
+        ctk.CTkLabel(
+            profile_frame,
+            text="Purchase History",
+            font=("Poppins",18,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w", padx=20, pady=(25,10))
+
+        history_frame = ctk.CTkFrame(profile_frame)
+        history_frame.pack(fill="both", expand=True, padx=15, pady=(0,15))
+
+        columns = ("Sale ID","Date","Payment","Total")
+
+        self.history_table = ttk.Treeview(
+            history_frame,
+            columns=columns,
+            show="headings",
+            height=10
+        )
+
+        for col in columns:
+            self.history_table.heading(col, text=col)
+            self.history_table.column("Sale ID", width=55, anchor="center", stretch=False)
+            self.history_table.column("Date", width=95, anchor="center", stretch=True)
+            self.history_table.column("Payment", width=75, anchor="center", stretch=True)
+            self.history_table.column("Total", width=90, anchor="e", stretch=True)
+
+        history_style = ttk.Style()
+
+        history_style.configure(
+            "History.Treeview",
+            rowheight=24,
+            font=("Poppins", 11)
+        )
+
+        history_style.configure(
+            "History.Treeview.Heading",
+            font=("Poppins", 11, "bold")
+        )
+
+        self.history_table.configure(style="History.Treeview")
+        
+        history_scroll = ttk.Scrollbar(
+            history_frame,
+            orient="vertical",
+            command=self.history_table.yview
+        )
+
+        self.history_table.configure(yscrollcommand=history_scroll.set)
+
+        self.history_table.pack(side="left", fill="both", expand=True)
+        history_scroll.pack(side="right", fill="y")
+
 
         # Table Style
         style = ttk.Style()
@@ -205,6 +332,55 @@ class CustomersPage(ctk.CTkFrame):
         self.customer_count_label.configure(
             text=f"{len(customers)} Customers Found"
         )
+
+        # ==========================================================
+        # LOAD CUSTOMER PROFILE
+        # ==========================================================
+
+    def load_customer_profile(self, event=None):
+
+            selected = self.table.selection()
+
+            if not selected:
+                return
+
+            customer_id = self.table.item(selected[0])["values"][0]
+
+            summary = get_customer_summary(customer_id)
+            history = get_customer_purchase_history(customer_id)
+
+            # ---------- Summary ----------
+            self.profile_name.set(summary["name"])
+            self.profile_phone.set(summary["phone"])
+            self.profile_points.set(str(summary["loyalty_points"]))
+            self.profile_orders.set(str(summary["total_orders"]))
+            self.profile_spent.set(f"₹{float(summary['total_spent']):.2f}")
+
+            if summary["last_purchase"]:
+                self.profile_last_purchase.set(
+                    summary["last_purchase"].strftime("%d %b %Y")
+                )
+            else:
+                self.profile_last_purchase.set("No Purchases")
+
+            # ---------- Purchase History ----------
+            for row in self.history_table.get_children():
+                self.history_table.delete(row)
+
+            for sale in history:
+
+                sale_id, sale_date, payment, discount, gst, total = sale
+
+                self.history_table.insert(
+                    "",
+                    "end",
+                    values=(
+                        sale_id,
+                        sale_date.strftime("%d-%m-%Y"),
+                        payment,
+                        f"₹{float(total):.2f}"
+                    )
+                )
 
     # ==========================================================
     # ADD CUSTOMER POPUP
