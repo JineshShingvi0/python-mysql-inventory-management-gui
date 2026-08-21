@@ -4,8 +4,16 @@
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 
-from backend import get_products_for_billing
+from backend import (
+    get_products_for_billing,
+    get_or_create_customer,
+    get_customer_by_phone,
+    create_sale,
+    add_sale_items,
+    update_stock_after_sale
+)
 
+from invoice import generate_invoice
 
 class BillingPage(ctk.CTkScrollableFrame):
 
@@ -51,6 +59,35 @@ class BillingPage(ctk.CTkScrollableFrame):
         if product_names:
             self.product_combo.configure(values=product_names)
             self.product_combo.set(product_names[0])
+
+    # ==========================================================
+    # FETCH CUSTOMER FROM PHONE NUMBER
+    # ==========================================================
+
+    def fetch_customer(self, event=None):
+
+        phone = self.phone_var.get().strip()
+
+        # Wait until phone number is complete
+        if len(phone) != 10:
+            self.customer_name_var.set("")
+            self.points_var.set("⭐ Loyalty Points : 0")
+            return
+
+        customer = get_customer_by_phone(phone)
+
+        if customer:
+
+            self.customer_name_var.set(customer["name"])
+
+            self.points_var.set(
+                f"⭐ Loyalty Points : {customer['loyalty_points']}"
+            )
+
+        else:
+
+            self.customer_name_var.set("")
+            self.points_var.set("⭐ Loyalty Points : New Customer")
 
     # ==========================================================
     # ADD PRODUCT TO BILLING CART
@@ -253,19 +290,123 @@ class BillingPage(ctk.CTkScrollableFrame):
     # ==========================================================
     # BILL SUMMARY CALCULATION
     # ==========================================================
+
     def calculate_summary(self, subtotal):
 
-        discount = 0
+        # Read discount %
+        try:
+            discount_percent = float(self.discount_percent_var.get())
 
-        gst = subtotal * 0.18
+            if discount_percent < 0:
+                discount_percent = 0
 
-        grand_total = subtotal - discount + gst
+            if discount_percent > 100:
+                discount_percent = 100
 
+        except ValueError:
+            discount_percent = 0
+
+        # Calculate discount
+        discount_amount = subtotal * (discount_percent / 100)
+
+        taxable_amount = subtotal - discount_amount
+
+        gst = taxable_amount * 0.18
+
+        grand_total = taxable_amount + gst
+
+        # Update UI
         self.subtotal_var.set(f"₹{subtotal:.2f}")
-        self.discount_var.set(f"₹{discount:.2f}")
+        self.discount_var.set(f"₹{discount_amount:.2f}")
         self.gst_var.set(f"₹{gst:.2f}")
         self.total_var.set(f"₹{grand_total:.2f}")
 
+    # ==========================================================
+    # GENERATE COMPLETE BILL
+    # ==========================================================
+
+    def generate_bill(self):
+
+        # ---------------- Customer Validation ----------------
+        customer_name = self.customer_name_var.get().strip()
+        phone = self.phone_var.get().strip()
+        payment = self.payment_method_var.get()
+
+        if customer_name == "" or phone == "":
+            messagebox.showerror(
+                "Missing Details",
+                "Enter customer name and phone number."
+            )
+            return
+
+        if len(self.cart) == 0:
+            messagebox.showwarning(
+                "Empty Cart",
+                "Please add products to the cart."
+            )
+            return
+
+        # ---------------- Calculate Totals ----------------
+        subtotal = sum(item["subtotal"] for item in self.cart)
+
+        try:
+            discount_percent = float(self.discount_percent_var.get())
+        except ValueError:
+            discount_percent = 0
+
+        discount = subtotal * (discount_percent / 100)
+
+        taxable_amount = subtotal - discount
+
+        gst = taxable_amount * 0.18
+
+        grand_total = taxable_amount + gst
+        # ---------------- Customer ----------------
+        customer_id = get_or_create_customer(customer_name, phone)
+
+        # ---------------- Create Sale ----------------
+        sale_id = create_sale(
+            customer_id=customer_id,
+            total=grand_total,
+            gst=gst,
+            discount=discount,
+            payment_method=payment
+        )
+
+        # ---------------- Save Sale Items ----------------
+        add_sale_items(sale_id, self.cart)
+
+        # ---------------- Update Stock ----------------
+        update_stock_after_sale(self.cart)
+
+        # ---------------- Generate Invoice PDF ----------------
+        invoice_path = generate_invoice(
+            sale_id=sale_id,
+            customer_name=customer_name,
+            phone=phone,
+            payment_method=payment,
+            cart=self.cart,
+            subtotal=subtotal,
+            gst=gst,
+            discount=discount,
+            grand_total=grand_total
+        )
+
+        # ---------------- Success Popup ----------------
+        messagebox.showinfo(
+            "Bill Generated Successfully",
+            f"Invoice Saved Successfully!\n\n{invoice_path}"
+        )
+
+        # ---------------- Reset Billing Screen ----------------
+        self.cart.clear()
+        self.refresh_cart()
+
+        self.phone_var.set("")
+        self.customer_name_var.set("")
+        self.payment_method_var.set("Cash")
+        self.quantity_var.set("1")
+        self.discount_percent_var.set("0")
     # ==========================================================
     # BUILD USER INTERFACE
     # ==========================================================
@@ -313,6 +454,8 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.phone_var = ctk.StringVar()
         self.customer_name_var = ctk.StringVar()
         self.payment_method_var = ctk.StringVar(value="Cash")
+        self.points_var = ctk.StringVar(value="⭐ Loyalty Points : 0")
+
 
         # Phone
         ctk.CTkLabel(customer_frame, text="Phone Number").grid(
@@ -327,6 +470,7 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         self.phone_entry.grid(
             row=2, column=0, padx=20, pady=(5, 15), sticky="ew")
+        self.phone_entry.bind("<KeyRelease>", self.fetch_customer)
 
         # Name
         ctk.CTkLabel(customer_frame, text="Customer Name").grid(
@@ -341,6 +485,22 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         self.customer_entry.grid(
             row=2, column=1, padx=20, pady=(5, 15), sticky="ew")
+
+        # Loyalty Points
+        self.points_label = ctk.CTkLabel(
+            customer_frame,
+            textvariable=self.points_var,
+            font=("Poppins", 12, "bold"),
+            text_color="#16A34A"
+        )
+
+        self.points_label.grid(
+            row=3,
+            column=1,
+            padx=20,
+            pady=(0,15),
+            sticky="w"
+        )
 
         # Payment Method
         ctk.CTkLabel(customer_frame, text="Payment Method").grid(
@@ -529,7 +689,10 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         summary_frame.pack(fill="x", padx=30, pady=(10, 30))
 
-        summary_frame.grid_columnconfigure((0, 1), weight=1)
+        # Three columns
+        summary_frame.grid_columnconfigure(0, weight=3)  # Labels
+        summary_frame.grid_columnconfigure(1, weight=1)  # Discount input
+        summary_frame.grid_columnconfigure(2, weight=2)  # Amounts
 
         ctk.CTkLabel(
             summary_frame,
@@ -541,6 +704,7 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         # Variables
         self.subtotal_var = ctk.StringVar(value="₹0.00")
+        self.discount_percent_var = ctk.StringVar(value="0")
         self.discount_var = ctk.StringVar(value="₹0.00")
         self.gst_var = ctk.StringVar(value="₹0.00")
         self.total_var = ctk.StringVar(value="₹0.00")
@@ -551,18 +715,62 @@ class BillingPage(ctk.CTkScrollableFrame):
                 summary_frame,
                 text=title,
                 font=("Poppins", 14)
-            ).grid(row=row, column=0,
-                   sticky="w", padx=20, pady=6)
+            ).grid(
+                row=row,
+                column=0,
+                sticky="w",
+                padx=20,
+                pady=8
+            )
 
             ctk.CTkLabel(
                 summary_frame,
                 textvariable=variable,
                 font=("Poppins", 14, "bold"),
                 text_color="#065F46"
-            ).grid(row=row, column=1,
-                   sticky="e", padx=20, pady=6)
-
+            ).grid(
+                row=row,
+                column=2,
+                sticky="e",
+                padx=20,
+                pady=8
+            )
         summary_row("Subtotal", self.subtotal_var, 1)
+
+       # ---------------- Discount Percentage ----------------
+
+        ctk.CTkLabel(
+            summary_frame,
+            text="Discount (%)",
+            font=("Poppins", 14)
+        ).grid(
+            row=2,
+            column=0,
+            sticky="w",
+            padx=20,
+            pady=8
+        )
+
+        discount_entry = ctk.CTkEntry(
+            summary_frame,
+            textvariable=self.discount_percent_var,
+            width=60,
+            height=30,
+            justify="center"
+        )
+
+        discount_entry.grid(
+            row=2,
+            column=1,
+            sticky="w",
+            padx=(10, 0)
+        )
+
+        discount_entry.bind(
+            "<KeyRelease>",
+            lambda event: self.refresh_cart()
+        )
+
         summary_row("Discount", self.discount_var, 2)
         summary_row("GST (18%)", self.gst_var, 3)
 
@@ -570,7 +778,7 @@ class BillingPage(ctk.CTkScrollableFrame):
             summary_frame,
             height=2,
             fg_color="#D1D5DB"
-        ).grid(row=4, column=0, columnspan=2,
+        ).grid(row=5, column=0, columnspan=2,
                sticky="ew", padx=20, pady=10)
 
         summary_row("Grand Total", self.total_var, 5)
@@ -581,11 +789,13 @@ class BillingPage(ctk.CTkScrollableFrame):
             fg_color="#16A34A",
             hover_color="#15803D",
             height=45,
-            font=("Poppins", 15, "bold")
+            font=("Poppins", 15, "bold"),
+            command=self.generate_bill
+
         )
 
         self.generate_button.grid(
-            row=6,
+            row=7,
             column=0,
             columnspan=2,
             sticky="ew",
