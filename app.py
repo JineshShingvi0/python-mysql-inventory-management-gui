@@ -2,7 +2,7 @@ import customtkinter as ctk
 from PIL import Image
 from gui.products import ProductsPage
 from gui.billing import BillingPage
-
+from gui.customers import CustomersPage
 # -----------------------------
 # Theme Configuration
 # -----------------------------
@@ -91,6 +91,7 @@ class ShingviSupermartApp(ctk.CTk):
         self.customers_btn = self.create_sidebar_button(
             "👤 Customers", 6, None
         )
+        self.customers_btn.configure(command=self.show_customers)
 
         self.reports_btn = self.create_sidebar_button(
             "📊 Reports", 7, None
@@ -139,6 +140,9 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.billing_page = BillingPage(self.content)
         self.billing_page.pack_forget()
+
+        self.customers_page = CustomersPage(self.content)
+        self.customers_page.pack_forget()
 
         # Show Dashboard First
         self.show_dashboard()
@@ -252,6 +256,7 @@ class ShingviSupermartApp(ctk.CTk):
         self.dashboard_page.pack_forget()
         self.products_page.pack_forget()
         self.billing_page.pack_forget()
+        self.customers_page.pack_forget()
 
     def highlight_button(self, active_button):
         buttons = [
@@ -290,6 +295,14 @@ class ShingviSupermartApp(ctk.CTk):
         self.hide_all_pages()
 
         self.billing_page.pack(fill="both", expand=True)
+
+    def show_customers(self):
+
+        self.hide_all_pages()
+
+        self.customers_page.pack(fill="both", expand=True)
+
+        self.customers_page.load_customers()
 
     # ==========================================================
     # THEME

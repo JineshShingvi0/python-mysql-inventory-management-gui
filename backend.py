@@ -432,3 +432,134 @@ def get_or_create_customer(name, phone):
     connection.close()
 
     return customer_id
+
+
+# ==========================================================
+# GET ALL CUSTOMERS
+# ==========================================================
+
+def get_all_customers():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            customer_id,
+            name,
+            phone,
+            email,
+            address,
+            loyalty_points
+        FROM customers
+        ORDER BY name
+    """)
+
+    customers = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return customers
+
+
+# ==========================================================
+# SEARCH CUSTOMERS
+# ==========================================================
+
+def search_customers(keyword):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            customer_id,
+            name,
+            phone,
+            email,
+            address,
+            loyalty_points
+        FROM customers
+        WHERE
+            name LIKE %s
+            OR phone LIKE %s
+        ORDER BY name
+    """,
+    (f"%{keyword}%", f"%{keyword}%"))
+
+    result = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return result
+
+
+# ==========================================================
+# ADD CUSTOMER
+# ==========================================================
+
+def add_customer(name, phone, email="", address=""):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        INSERT INTO customers
+        (name, phone, email, address)
+        VALUES (%s,%s,%s,%s)
+    """,
+    (name, phone, email, address))
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+
+# ==========================================================
+# UPDATE CUSTOMER
+# ==========================================================
+
+def update_customer(customer_id, name, phone, email, address):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        UPDATE customers
+        SET
+            name=%s,
+            phone=%s,
+            email=%s,
+            address=%s
+        WHERE customer_id=%s
+    """,
+    (name, phone, email, address, customer_id))
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+
+# ==========================================================
+# DELETE CUSTOMER
+# ==========================================================
+
+def delete_customer(customer_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute(
+        "DELETE FROM customers WHERE customer_id=%s",
+        (customer_id,)
+    )
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
