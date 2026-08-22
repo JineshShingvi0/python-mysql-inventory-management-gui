@@ -670,3 +670,173 @@ def get_customer_purchase_history(customer_id):
     connection.close()
 
     return history
+
+# ==========================================================
+# TODAY'S REVENUE
+# ==========================================================
+
+def get_today_revenue():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT COALESCE(SUM(total_amount),0)
+        FROM sales
+        WHERE DATE(sale_date)=CURDATE()
+    """)
+
+    revenue = cursor.fetchone()[0]
+
+    cursor.close()
+    connection.close()
+
+    return float(revenue)
+
+# ==========================================================
+# TODAY'S ORDERS
+# ==========================================================
+
+def get_today_orders():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM sales
+        WHERE DATE(sale_date)=CURDATE()
+    """)
+
+    orders = cursor.fetchone()[0]
+
+    cursor.close()
+    connection.close()
+
+    return orders
+
+# ==========================================================
+# TOTAL PRODUCTS
+# ==========================================================
+
+def get_total_products():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM products")
+
+    total = cursor.fetchone()[0]
+
+    cursor.close()
+    connection.close()
+
+    return total
+
+# ==========================================================
+# LOW STOCK PRODUCTS
+# ==========================================================
+
+def get_low_stock_products():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            name,
+            stock,
+            minimum_stock
+        FROM products
+        WHERE stock <= minimum_stock
+        ORDER BY stock ASC
+    """)
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return products
+
+# ==========================================================
+# BEST SELLING PRODUCTS
+# ==========================================================
+
+def get_best_selling_products(limit=5):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            p.name,
+            SUM(si.quantity) AS sold_quantity
+        FROM sale_items si
+        JOIN products p
+            ON si.product_id = p.product_id
+        GROUP BY p.name
+        ORDER BY sold_quantity DESC
+        LIMIT %s
+    """, (limit,))
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return products
+
+# ==========================================================
+# TOP CUSTOMERS
+# ==========================================================
+
+def get_top_customers(limit=5):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            c.name,
+            SUM(s.total_amount) AS total_spent
+        FROM sales s
+        JOIN customers c
+            ON s.customer_id = c.customer_id
+        GROUP BY c.name
+        ORDER BY total_spent DESC
+        LIMIT %s
+    """, (limit,))
+
+    customers = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return customers
+
+# ==========================================================
+# MONTHLY SALES SUMMARY
+# ==========================================================
+
+def get_monthly_sales():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            MONTH(sale_date) AS month,
+            COALESCE(SUM(total_amount),0) AS revenue
+        FROM sales
+        WHERE YEAR(sale_date)=YEAR(CURDATE())
+        GROUP BY MONTH(sale_date)
+        ORDER BY MONTH(sale_date)
+    """)
+
+    data = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return data

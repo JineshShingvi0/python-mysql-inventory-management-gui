@@ -3,6 +3,9 @@ from PIL import Image
 from gui.products import ProductsPage
 from gui.billing import BillingPage
 from gui.customers import CustomersPage
+from gui.reports import ReportsPage
+
+
 # -----------------------------
 # Theme Configuration
 # -----------------------------
@@ -96,6 +99,7 @@ class ShingviSupermartApp(ctk.CTk):
         self.reports_btn = self.create_sidebar_button(
             "📊 Reports", 7, None
         )
+        self.reports_btn.configure(command=self.show_reports)
 
         # -----------------------------
         # THEME SWITCHER
@@ -143,6 +147,9 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.customers_page = CustomersPage(self.content)
         self.customers_page.pack_forget()
+
+        self.reports_page = ReportsPage(self.content)
+        self.reports_page.pack_forget()
 
         # Show Dashboard First
         self.show_dashboard()
@@ -257,6 +264,7 @@ class ShingviSupermartApp(ctk.CTk):
         self.products_page.pack_forget()
         self.billing_page.pack_forget()
         self.customers_page.pack_forget()
+        self.reports_page.pack_forget()
 
     def highlight_button(self, active_button):
         buttons = [
@@ -304,6 +312,11 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.customers_page.load_customers()
 
+    def show_reports(self):
+        self.hide_all_pages()
+        self.reports_page.pack(fill="both", expand=True)
+        self.reports_page.load_reports()
+        
     # ==========================================================
     # THEME
     # ==========================================================
