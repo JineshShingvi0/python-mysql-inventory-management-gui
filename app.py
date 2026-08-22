@@ -394,7 +394,7 @@ class ShingviSupermartApp(ctk.CTk):
             1,
             "#F3E8FF"
         )
-
+        
         notification = ctk.CTkFrame(
             right,
             fg_color="#F9FAFB",
