@@ -829,6 +829,139 @@ def get_low_stock_products():
     return products
 
 # ==========================================================
+# DASHBOARD INVENTORY ALERT SUMMARY
+# ==========================================================
+def get_dashboard_inventory_alerts():
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    # Healthy Products
+    cursor.execute("""
+        SELECT COUNT(*) AS total
+        FROM products
+        WHERE stock > minimum_stock
+    """)
+    healthy = cursor.fetchone()["total"]
+
+    # Low Stock
+    cursor.execute("""
+        SELECT COUNT(*) AS total
+        FROM products
+        WHERE stock <= minimum_stock
+        AND stock > 0
+    """)
+    low_stock = cursor.fetchone()["total"]
+
+    # Out of Stock
+    cursor.execute("""
+        SELECT COUNT(*) AS total
+        FROM products
+        WHERE stock = 0
+    """)
+    out_stock = cursor.fetchone()["total"]
+
+    cursor.close()
+    connection.close()
+
+    return {
+        "healthy": healthy,
+        "low_stock": low_stock,
+        "out_stock": out_stock
+    }
+
+# ==========================================================
+# DASHBOARD BUSINESS INSIGHTS
+# ==========================================================
+
+def get_dashboard_insights():
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    insights = []
+
+    # Today's Revenue
+    revenue = get_today_revenue()
+
+    if revenue >= 5000:
+        insights.append(
+            ("🟢 Excellent Sales Day",
+             f"Today's revenue reached ₹{revenue:,.2f}.")
+        )
+
+    # Low Stock Products
+    cursor.execute("""
+        SELECT name, stock
+        FROM products
+        WHERE stock <= minimum_stock
+        LIMIT 2
+    """)
+
+    for item in cursor.fetchall():
+        insights.append(
+            ("🟡 Low Stock Alert",
+             f"{item['name'].title()} has only {item['stock']} units remaining.")
+        )
+
+    # Best Selling Product Today
+    cursor.execute("""
+        SELECT p.name, SUM(si.quantity) AS qty
+        FROM sale_items si
+        JOIN products p
+        ON si.product_id = p.product_id
+        JOIN sales s
+        ON si.sale_id = s.sale_id
+        WHERE DATE(s.sale_date)=CURDATE()
+        GROUP BY p.name
+        ORDER BY qty DESC
+        LIMIT 1
+    """)
+
+    best = cursor.fetchone()
+
+    if best:
+        insights.append(
+            ("🏆 Best Selling Product",
+             f"{best['name'].title()} sold {best['qty']} units today.")
+        )
+
+    cursor.close()
+    connection.close()
+
+    return insights
+
+# ==========================================================
+# DASHBOARD TOP PRODUCTS TODAY
+# ==========================================================
+def get_dashboard_top_products(limit=5):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            p.name,
+            SUM(si.quantity) AS quantity
+        FROM sale_items si
+        JOIN products p
+            ON si.product_id = p.product_id
+        JOIN sales s
+            ON si.sale_id = s.sale_id
+        WHERE DATE(s.sale_date)=CURDATE()
+        GROUP BY p.name
+        ORDER BY quantity DESC
+        LIMIT %s
+    """, (limit,))
+
+    data = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return data
+
+# ==========================================================
 # BEST SELLING PRODUCTS
 # ==========================================================
 
@@ -901,6 +1034,32 @@ def get_monthly_sales():
         WHERE YEAR(sale_date)=YEAR(CURDATE())
         GROUP BY MONTH(sale_date)
         ORDER BY MONTH(sale_date)
+    """)
+
+    data = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return data
+
+# ==========================================================
+# LAST 7 DAYS SALES
+# ==========================================================
+
+def get_weekly_sales():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            DATE(sale_date) AS day,
+            SUM(total_amount)
+        FROM sales
+        WHERE sale_date >= CURDATE() - INTERVAL 6 DAY
+        GROUP BY DATE(sale_date)
+        ORDER BY DATE(sale_date)
     """)
 
     data = cursor.fetchall()
@@ -991,6 +1150,35 @@ def get_sales_history():
             ON s.customer_id = c.customer_id
         ORDER BY s.sale_id DESC
     """)
+
+    sales = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return sales
+
+# ==========================================================
+# RECENT SALES FOR DASHBOARD
+# ==========================================================
+def get_recent_sales(limit=5):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            s.sale_id,
+            c.name,
+            s.payment_method,
+            s.total_amount,
+            s.sale_date
+        FROM sales s
+        JOIN customers c
+            ON s.customer_id = c.customer_id
+        ORDER BY s.sale_date DESC
+        LIMIT %s
+    """, (limit,))
 
     sales = cursor.fetchall()
 
