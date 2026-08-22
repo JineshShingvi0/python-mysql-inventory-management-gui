@@ -410,9 +410,6 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ---------------- Save Sale Items ----------------
         add_sale_items(sale_id, self.cart)
 
-        # ---------------- Update Stock ----------------
-        update_stock_after_sale(self.cart)
-
         # ---------------- Loyalty Points ----------------
         earned_points = add_loyalty_points(
             customer_id,

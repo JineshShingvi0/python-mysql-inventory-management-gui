@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from tkinter import ttk
+from datetime import datetime
 
 from backend import (
     get_today_revenue,
@@ -8,7 +9,12 @@ from backend import (
     get_low_stock_products,
     get_best_selling_products,
     get_top_customers,
-    get_monthly_sales 
+    get_monthly_sales,
+    get_inventory_value,
+    get_stock_movements,
+    get_sales_history,
+    get_payment_analytics,
+    get_inventory_health
 )
 
 
@@ -21,22 +27,101 @@ class ReportsPage(ctk.CTkScrollableFrame):
             corner_radius=0
         )
 
+        self.revenue_var = ctk.StringVar(value="₹0")
+        self.orders_var = ctk.StringVar(value="0")
+        self.products_var = ctk.StringVar(value="0")
+        self.low_stock_var = ctk.StringVar(value="0")
+        self.purchase_value_var = ctk.StringVar(value="₹0")
+        self.selling_value_var = ctk.StringVar(value="₹0")
+        self.profit_value_var = ctk.StringVar(value="₹0")
+        self.cash_var = ctk.StringVar(value="₹0")
+        self.upi_var = ctk.StringVar(value="₹0")
+        self.card_var = ctk.StringVar(value="₹0")
+        self.payment_var = ctk.StringVar(value="Cash")
+        self.date_var = ctk.StringVar()
+        self.time_var = ctk.StringVar()
+        self.last_updated_var = ctk.StringVar(value="Last Updated • --:--:--")
+        self.healthy_var = ctk.StringVar(value="0")
+        self.low_inventory_var = ctk.StringVar(value="0")
+        self.out_stock_var = ctk.StringVar(value="0")
+        self.health_score_var = ctk.StringVar(value="0%")
+
         self.build_ui()
-        self.load_reports()
+        self.load_reports()     
+        self.update_clock() 
 
     # ==========================================================
     # BUILD UI
     # ==========================================================
     def build_ui(self):
 
-        # ---------------- Page Title ----------------
-        ctk.CTkLabel(
-            self,
-            text="📊 Reports & Analytics",
-            font=("Poppins", 30, "bold"),
-            text_color="#065F46"
-        ).pack(anchor="w", padx=30, pady=(20, 5))
+        # =====================================================
+        # PREMIUM HEADER
+        # =====================================================
 
+        header = ctk.CTkFrame(
+            self,
+            fg_color="#ECFDF5",
+            corner_radius=18
+        )
+        header.pack(fill="x", padx=30, pady=(20,20))
+
+        # Left Side
+        left = ctk.CTkFrame(header, fg_color="transparent")
+        left.pack(side="left", padx=20, pady=15)
+
+        ctk.CTkLabel(
+            left,
+            text="Welcome Back 👋",
+            font=("Poppins",14)
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            left,
+            text="Jinesh",
+            font=("Poppins",28,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w")
+
+        ctk.CTkLabel(
+            left,
+            text="Shingvi Supermart Analytics Dashboard",
+            font=("Poppins",13)
+        ).pack(anchor="w")
+
+        # Right Side
+        right = ctk.CTkFrame(header, fg_color="transparent")
+        right.pack(side="right", padx=20, pady=15)
+
+        ctk.CTkLabel(
+            right,
+            textvariable=self.date_var,
+            font=("Poppins",14,"bold")
+        ).pack(anchor="e")
+
+        ctk.CTkLabel(
+            right,
+            textvariable=self.time_var,
+            font=("Poppins",22,"bold"),
+            text_color="#16A34A"
+        ).pack(anchor="e")
+
+        ctk.CTkLabel(
+            right,
+            textvariable=self.last_updated_var,
+            font=("Poppins",11)
+        ).pack(anchor="e")
+
+        # Refresh Button
+        refresh_btn = ctk.CTkButton(
+            right,
+            text="↻ Refresh Reports",
+            width=170,
+            fg_color="#16A34A",
+            hover_color="#15803D",
+            command=self.load_reports
+        )
+        refresh_btn.pack(anchor="e", pady=(10,0))
         ctk.CTkLabel(
             self,
             text="Business insights, sales analytics and inventory health.",
@@ -44,16 +129,6 @@ class ReportsPage(ctk.CTkScrollableFrame):
             text_color="gray40"
         ).pack(anchor="w", padx=30)
 
-        # ---------------- Refresh Button ----------------
-        refresh_btn = ctk.CTkButton(
-            self,
-            text="🔄 Refresh Reports",
-            width=180,
-            fg_color="#16A34A",
-            hover_color="#15803D",
-            command=self.load_reports
-        )
-        refresh_btn.pack(anchor="e", padx=30, pady=(0, 20))
 
         # =====================================================
         # SUMMARY CARDS
@@ -64,22 +139,262 @@ class ReportsPage(ctk.CTkScrollableFrame):
 
         cards_frame.grid_columnconfigure((0, 1), weight=1)
 
-        self.revenue_var = ctk.StringVar(value="₹0")
-        self.orders_var = ctk.StringVar(value="0")
-        self.products_var = ctk.StringVar(value="0")
-        self.low_stock_var = ctk.StringVar(value="0")
+        self.create_card(
+            cards_frame,
+            "💰 Today's Revenue",
+            self.revenue_var,
+            0,0,
+            "#DCFCE7"
+        )
 
-        self.create_card(cards_frame, "💰 Today's Revenue",
-                         self.revenue_var, 0, 0)
+        self.create_card(
+            cards_frame,
+            "🛒 Orders Today",
+            self.orders_var,
+            0,1,
+            "#DBEAFE"
+        )
 
-        self.create_card(cards_frame, "🛒 Orders Today",
-                         self.orders_var, 0, 1)
+        self.create_card(
+            cards_frame,
+            "📦 Products",
+            self.products_var,
+            1,0,
+            "#FEF3C7"
+        )
 
-        self.create_card(cards_frame, "📦 Products",
-                         self.products_var, 1, 0)
+        self.create_card(
+            cards_frame,
+            "⚠ Low Stock Products",
+            self.low_stock_var,
+            1,1,
+            "#FEE2E2"
+        )
 
-        self.create_card(cards_frame, "⚠️ Low Stock Products",
-                         self.low_stock_var, 1, 1)
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
+
+
+        # =====================================================
+        # PAYMENT ANALYTICS
+        # =====================================================
+
+        payment_frame = ctk.CTkFrame(self, fg_color="transparent")
+        payment_frame.pack(fill="x", padx=30, pady=(0,20))
+
+        payment_frame.grid_columnconfigure((0,1,2,3), weight=1)
+
+        self.create_payment_card(
+            payment_frame,
+            "Cash Revenue",
+            self.cash_var,
+            "#DCFCE7",
+            "💵",
+            0,0
+        )
+
+        self.create_payment_card(
+            payment_frame,
+            "UPI Revenue",
+            self.upi_var,
+            "#DBEAFE",
+            "📱",
+            0,1
+        )
+
+        self.create_payment_card(
+            payment_frame,
+            "Card Revenue",
+            self.card_var,
+            "#F3E8FF",
+            "💳",
+            0,2
+        )
+
+        self.create_payment_card(
+            payment_frame,
+            "Most Used",
+            self.payment_var,
+            "#FEF3C7",
+            "🏆",
+            0,3
+        )
+        
+        progress_frame = ctk.CTkFrame(self)
+        progress_frame.pack(fill="x", padx=30, pady=(0,20))
+
+        ctk.CTkLabel(
+            progress_frame,
+            text="Payment Distribution",
+            font=("Poppins",18,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w", padx=20, pady=(15,10))
+
+        self.cash_progress = ctk.CTkProgressBar(progress_frame)
+        self.upi_progress = ctk.CTkProgressBar(progress_frame)
+        self.card_progress = ctk.CTkProgressBar(progress_frame)
+
+        self.cash_progress.configure(progress_color="#16A34A")
+        self.upi_progress.configure(progress_color="#2563EB")
+        self.card_progress.configure(progress_color="#9333EA")
+
+        self.cash_progress.set(0)
+        self.upi_progress.set(0)
+        self.card_progress.set(0)
+        
+        for title, bar in [
+            ("💵 Cash", self.cash_progress),
+            ("📱 UPI", self.upi_progress),
+            ("💳 Card", self.card_progress)
+        ]:
+            ctk.CTkLabel(progress_frame,
+                        text=title,
+                        font=("Poppins",13,"bold")).pack(anchor="w", padx=20)
+
+            bar.pack(fill="x", padx=20, pady=(0,12))
+
+            # ---------------- DONUT CHART ----------------
+
+        self.payment_canvas = ctk.CTkCanvas(
+            progress_frame,
+            width=280,
+            height=280,
+            bg="white",
+            highlightthickness=0
+        )
+
+        self.payment_canvas.pack(pady=(10,20))
+
+        self.cash_progress.configure(progress_color="#16A34A")
+        self.upi_progress.configure(progress_color="#2563EB")
+        self.card_progress.configure(progress_color="#9333EA")
+
+        self.cash_progress.set(0)
+        self.upi_progress.set(0)
+        self.card_progress.set(0)
+
+        
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
+
+        # =====================================================
+        # INVENTORY HEALTH
+        # =====================================================
+
+        health_frame = ctk.CTkFrame(self, fg_color="transparent")
+        health_frame.pack(fill="x", padx=30, pady=(0,20))
+
+        ctk.CTkLabel(
+            health_frame,
+            text="📦 Inventory Health",
+            font=("Poppins",20,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w", pady=(0,10))
+
+        cards = ctk.CTkFrame(health_frame, fg_color="transparent")
+        cards.pack(fill="x")
+
+        cards.grid_columnconfigure((0,1,2,3), weight=1)
+
+        self.create_payment_card(
+            cards,
+            "Healthy",
+            self.healthy_var,
+            "#DCFCE7",
+            "🟢",
+            0,0
+        )
+
+        self.create_payment_card(
+            cards,
+            "Low Stock",
+            self.low_inventory_var,
+            "#FEF3C7",
+            "🟡",
+            0,1
+        )
+
+        self.create_payment_card(
+            cards,
+            "Out of Stock",
+            self.out_stock_var,
+            "#FEE2E2",
+            "🔴",
+            0,2
+        )
+
+        self.create_payment_card(
+            cards,
+            "Health Score",
+            self.health_score_var,
+            "#DBEAFE",
+            "💯",
+            0,3
+        )
+
+        score_frame = ctk.CTkFrame(health_frame)
+        score_frame.pack(fill="x", pady=(15,0))
+
+        ctk.CTkLabel(
+            score_frame,
+            text="Overall Inventory Health",
+            font=("Poppins",15,"bold")
+        ).pack(anchor="w", padx=20, pady=(15,8))
+
+        self.health_progress = ctk.CTkProgressBar(score_frame, height=20)
+        self.health_progress.pack(fill="x", padx=20, pady=(0,20))
+        self.health_progress.configure(
+            progress_color="#16A34A",
+            fg_color="#DCFCE7"
+        )
+
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
+
+        # =====================================================
+        # INVENTORY VALUE CARDS
+        # =====================================================
+
+        inventory_cards = ctk.CTkFrame(self, fg_color="transparent")
+        inventory_cards.pack(fill="x", padx=30, pady=(5,20))
+
+        inventory_cards.grid_columnconfigure((0,1,2), weight=1)
+
+        self.create_card(
+            inventory_cards,
+            "📦 Inventory Purchase Value",
+            self.purchase_value_var,
+            0,0
+        )
+
+        self.create_card(
+            inventory_cards,
+            "💰 Inventory Selling Value",
+            self.selling_value_var,
+            0,1
+        )
+
+        self.create_card(
+            inventory_cards,
+            "📈 Expected Profit",
+            self.profit_value_var,
+            0,2
+        )
 
         # =====================================================
         # TABLE SECTION
@@ -100,6 +415,14 @@ class ReportsPage(ctk.CTkScrollableFrame):
 
         self.build_best_selling_table()
         self.build_top_customer_table()
+
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
 
         # =====================================================
         # MONTHLY REVENUE CHART
@@ -123,6 +446,168 @@ class ReportsPage(ctk.CTkScrollableFrame):
         )
 
         self.chart_canvas.pack(fill="x", padx=20, pady=(0,20))
+
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
+
+        # =====================================================
+        # STOCK MOVEMENT HISTORY
+        # =====================================================
+
+        movement_frame = ctk.CTkFrame(self)
+        movement_frame.pack(fill="both", expand=True, padx=30, pady=(0,25))
+
+        ctk.CTkLabel(
+            movement_frame,
+            text="📦 Stock Movement History",
+            font=("Poppins",18,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w", padx=20, pady=(15,10))
+
+        columns = ("Date","Product","Movement","Quantity","Stock After")
+
+        self.movement_table = ttk.Treeview(
+            movement_frame,
+            columns=columns,
+            show="headings",
+            height=7
+        )
+
+        for col in columns:
+            self.movement_table.heading(col, text=col)
+
+        self.movement_table.column("Date", width=140, anchor="center")
+        self.movement_table.column("Product", width=180)
+        self.movement_table.column("Movement", width=110, anchor="center")
+        self.movement_table.column("Quantity", width=80, anchor="center")
+        self.movement_table.column("Stock After", width=100, anchor="center")
+
+        scroll = ttk.Scrollbar(
+            movement_frame,
+            orient="vertical",
+            command=self.movement_table.yview
+        )
+
+        self.movement_table.configure(yscrollcommand=scroll.set)
+
+        self.movement_table.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(20,0),
+            pady=(0,15)
+        )
+
+        scroll.pack(
+            side="right",
+            fill="y",
+            padx=(0,20),
+            pady=(0,15)
+        )
+
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
+
+
+        # =====================================================
+        # SALES LEDGER
+        # =====================================================
+
+        ledger_frame = ctk.CTkFrame(self)
+        ledger_frame.pack(fill="both", expand=True, padx=30, pady=(0,25))
+
+        # Header
+        header = ctk.CTkFrame(ledger_frame, fg_color="transparent")
+        header.pack(fill="x", padx=20, pady=(15,10))
+
+        ctk.CTkLabel(
+            header,
+            text="🧾 Sales Ledger",
+            font=("Poppins",18,"bold"),
+            text_color="#065F46"
+        ).pack(side="left")
+
+        # Search Box
+        self.search_var = ctk.StringVar()
+
+        search_entry = ctk.CTkEntry(
+            header,
+            textvariable=self.search_var,
+            placeholder_text="Search customer...",
+            width=220,
+            height=36
+        )
+
+        search_entry.pack(side="right")
+
+        search_entry.bind("<KeyRelease>", lambda event: self.load_reports())
+
+        # Ledger Table
+        columns = (
+            "Invoice",
+            "Customer",
+            "Payment",
+            "Total",
+            "Date"
+        )
+
+        self.sales_table = ttk.Treeview(
+            ledger_frame,
+            columns=columns,
+            show="headings",
+            height=8
+        )
+
+        for col in columns:
+            self.sales_table.heading(col, text=col)
+
+        self.sales_table.column("Invoice", width=90, anchor="center")
+        self.sales_table.column("Customer", width=180)
+        self.sales_table.column("Payment", width=100, anchor="center")
+        self.sales_table.column("Total", width=120, anchor="center")
+        self.sales_table.column("Date", width=150, anchor="center")
+
+        scroll = ttk.Scrollbar(
+            ledger_frame,
+            orient="vertical",
+            command=self.sales_table.yview
+        )
+
+        self.sales_table.configure(yscrollcommand=scroll.set)
+
+        self.sales_table.pack(
+            side="left",
+            fill="both",
+            expand=True,
+            padx=(20,0),
+            pady=(0,20)
+        )
+
+        scroll.pack(
+            side="right",
+            fill="y",
+            padx=(0,20),
+            pady=(0,20)
+        )
+
+        separator = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            height=2,
+            corner_radius=2
+        )
+        separator.pack(fill="x", padx=30, pady=(8,18))
+
 
         # =====================================================
         # LOW STOCK TABLE
@@ -167,38 +652,117 @@ class ReportsPage(ctk.CTkScrollableFrame):
 
         scrollbar.pack(side="right", fill="y", padx=(0, 20), pady=(0, 15))
 
+
     # ==========================================================
     # CARD UI
     # ==========================================================
 
-    def create_card(self, parent, title, variable, row, column):
+    def create_card(self, parent, title, variable, row, column, color="#FFFFFF"):
 
         card = ctk.CTkFrame(
             parent,
-            fg_color="white",
-            corner_radius=18,
+            fg_color=color,
+            corner_radius=20,
             border_width=1,
             border_color="#D1D5DB",
-            height=120
+            height=135
         )
 
-        card.grid(row=row, column=column,
-                  sticky="nsew", padx=10, pady=10)
+        card.grid(
+            row=row,
+            column=column,
+            padx=12,
+            pady=12,
+            sticky="nsew"
+        )
+
+        # Top Row
+        top = ctk.CTkFrame(card, fg_color="transparent")
+        top.pack(fill="x", padx=18, pady=(15,8))
+
+        ctk.CTkLabel(
+            top,
+            text=title,
+            font=("Poppins",14,"bold"),
+            text_color="#475569"
+        ).pack(side="left")
+
+        badge = ctk.CTkLabel(
+            top,
+            text="LIVE",
+            width=48,
+            height=22,
+            corner_radius=20,
+            fg_color="#DCFCE7",
+            text_color="#15803D",
+            font=("Poppins",10,"bold")
+        )
+        badge.pack(side="right")
+
+        # Main Value
+        ctk.CTkLabel(
+            card,
+            textvariable=variable,
+            font=("Poppins",30,"bold"),
+            text_color="#065F46"
+        ).pack(anchor="w", padx=18)
+
+        # Footer
+        ctk.CTkLabel(
+            card,
+            text="Updated Today",
+            font=("Poppins",11),
+            text_color="#64748B"
+        ).pack(anchor="w", padx=18, pady=(5,15))
+        
+    def create_payment_card(
+        self,
+        parent,
+        title,
+        variable,
+        color,
+        emoji,
+        row,
+        column
+    ):
+
+        card = ctk.CTkFrame(
+            parent,
+            fg_color=color,
+            corner_radius=18,
+            border_width=1,
+            border_color="#E5E7EB",
+            height=110
+        )
+
+        card.grid(
+            row=row,
+            column=column,
+            padx=10,
+            pady=10,
+            sticky="nsew"
+        )
 
         ctk.CTkLabel(
             card,
-            text=title,
-            font=("Poppins", 14),
-            text_color="#64748B"
-        ).pack(anchor="w", padx=18, pady=(18, 6))
+            text=f"{emoji} {title}",
+            font=("Poppins",13,"bold"),
+            text_color="#334155"
+        ).pack(anchor="w", padx=15, pady=(15,8))
 
         ctk.CTkLabel(
             card,
             textvariable=variable,
-            font=("Poppins", 26, "bold"),
+            font=("Poppins",24,"bold"),
             text_color="#065F46"
-        ).pack(anchor="w", padx=18)
+        ).pack(anchor="w", padx=15)
 
+        ctk.CTkLabel(
+            card,
+            text="Today's Analytics",
+            font=("Poppins",10),
+            text_color="#64748B"
+        ).pack(anchor="w", padx=15, pady=(4,12))
     # ==========================================================
     # BEST SELLING TABLE
     # ==========================================================
@@ -261,6 +825,115 @@ class ReportsPage(ctk.CTkScrollableFrame):
         self.customer_table.pack(fill="both", expand=True,
                                  padx=20, pady=(0, 15))
 
+
+    # =====================================================
+    # LIVE CLOCK
+    # =====================================================
+
+    def update_clock(self):
+
+        now = datetime.now()
+
+        self.date_var.set(now.strftime("%d %B %Y"))
+        self.time_var.set(now.strftime("%I:%M:%S %p"))
+
+        self.after(1000, self.update_clock)
+
+    def draw_payment_chart(self, cash, upi, card):
+
+        self.payment_canvas.delete("all")
+
+        total = cash + upi + card
+
+        if total == 0:
+            self.payment_canvas.create_text(
+                140,
+                140,
+                text="No Sales",
+                font=("Poppins",16,"bold"),
+                fill="#64748B"
+            )
+            return
+
+        x1, y1, x2, y2 = 30, 30, 250, 250
+
+        start = 90
+
+        colors = [
+            ("Cash", cash, "#16A34A"),
+            ("UPI", upi, "#2563EB"),
+            ("Card", card, "#9333EA")
+        ]
+
+        for label, value, color in colors:
+
+            extent = (value / total) * 360
+
+            self.payment_canvas.create_arc(
+                x1, y1, x2, y2,
+                start=start,
+                extent=-extent,
+                fill=color,
+                outline="white",
+                width=3
+            )
+
+            start -= extent
+
+        # Donut Hole
+        self.payment_canvas.create_oval(
+            75, 75, 205, 205,
+            fill="white",
+            outline="white"
+        )
+
+        self.payment_canvas.create_text(
+            140,
+            120,
+            text="Today's Sales",
+            font=("Poppins",11),
+            fill="#64748B"
+        )
+
+        self.payment_canvas.create_text(
+            140,
+            145,
+            text=f"₹{total:.0f}",
+            font=("Poppins",20,"bold"),
+            fill="#065F46"
+        )
+
+        # Legend
+        legend_y = 260
+
+        legend_items = [
+            ("Cash", "#16A34A"),
+            ("UPI", "#2563EB"),
+            ("Card", "#9333EA")
+        ]
+
+        legend_x = 20
+
+        for text, color in legend_items:
+
+            self.payment_canvas.create_rectangle(
+                legend_x,
+                legend_y,
+                legend_x + 12,
+                legend_y + 12,
+                fill=color,
+                outline=color
+            )
+
+            self.payment_canvas.create_text(
+                legend_x + 40,
+                legend_y + 6,
+                text=text,
+                font=("Poppins",10),
+                anchor="w"
+            )
+
+            legend_x += 90
     # ==========================================================
     # LOAD REPORTS
     # ==========================================================
@@ -272,12 +945,78 @@ class ReportsPage(ctk.CTkScrollableFrame):
         orders = get_today_orders()
         products = get_total_products()
         low_stock = get_low_stock_products()
+        inventory = get_inventory_value()
+        payment = get_payment_analytics()
+        health = get_inventory_health()
 
+
+        cash = payment["Cash"]["amount"]
+        upi = payment["UPI"]["amount"]
+        card = payment["Card"]["amount"]
+
+        total = cash + upi + card
+
+        if total > 0:
+            self.cash_progress.set(cash / total)
+            self.upi_progress.set(upi / total)
+            self.card_progress.set(card / total)
+        else:
+            self.cash_progress.set(0)
+            self.upi_progress.set(0)
+            self.card_progress.set(0)
+
+        self.healthy_var.set(str(health["healthy"]))
+        self.low_inventory_var.set(str(health["low_stock"]))
+        self.out_stock_var.set(str(health["out_of_stock"]))
+        self.health_score_var.set(f"{health['score']}%")
+
+        score = health["score"]
+
+        self.health_progress.set(score / 100)
+
+        if score >= 80:
+            self.health_progress.configure(progress_color="#16A34A")
+
+        elif score >= 50:
+            self.health_progress.configure(progress_color="#F59E0B")
+
+        else:
+            self.health_progress.configure(progress_color="#DC2626")
+                    
+        self.cash_var.set(
+            f"₹{payment['Cash']['amount']:.2f}"
+        )
+
+        self.upi_var.set(
+            f"₹{payment['UPI']['amount']:.2f}"
+        )
+
+        self.card_var.set(
+            f"₹{payment['Card']['amount']:.2f}"
+        )
+
+        self.payment_var.set(payment["most_used"])
+
+        self.draw_payment_chart(cash, upi, card)
+        
         self.revenue_var.set(f"₹{revenue:.2f}")
         self.orders_var.set(str(orders))
         self.products_var.set(str(products))
         self.low_stock_var.set(str(len(low_stock)))
 
+        self.purchase_value_var.set(
+            f"₹{inventory['purchase_value']:.2f}"
+        )
+
+        self.selling_value_var.set(
+            f"₹{inventory['selling_value']:.2f}"
+        )
+
+        self.profit_value_var.set(
+            f"₹{inventory['expected_profit']:.2f}"
+        )
+
+        
         # Best Selling Table
         for row in self.best_table.get_children():
             self.best_table.delete(row)
@@ -310,6 +1049,82 @@ class ReportsPage(ctk.CTkScrollableFrame):
         # Draw monthly revenue chart
         self.draw_monthly_chart()
 
+        now = datetime.now()
+
+        self.last_updated_var.set(
+            f"Last Updated • {now.strftime('%I:%M:%S %p')}"
+        )
+
+        # =====================================================
+        # STOCK MOVEMENT TABLE
+        # =====================================================
+
+        # Clear old rows
+        for row in self.movement_table.get_children():
+            self.movement_table.delete(row)
+
+        movements = get_stock_movements()
+
+        for movement_date, product, movement_type, qty, stock_after in movements:
+
+            movement_type = movement_type.strip().upper()
+
+            if movement_type in ("STOCK IN", "STOCKIN"):
+                movement = "🟢 STOCK IN"
+                quantity_display = f"+{abs(qty)}"
+
+            elif movement_type == "SALE":
+                movement = "🔴 SALE"
+                quantity_display = f"-{abs(qty)}"
+
+            else:
+                movement = movement_type
+                quantity_display = str(qty)
+
+            self.movement_table.insert(
+                "",
+                "end",
+                values=(
+                    movement_date.strftime("%d-%b %H:%M"),
+                    product.title(),
+                    movement,
+                    quantity_display,
+                    stock_after
+                )
+            )
+
+        # =====================================================
+        # SALES LEDGER
+        # =====================================================
+
+        for row in self.sales_table.get_children():
+            self.sales_table.delete(row)
+
+        sales = get_sales_history()
+
+        search_text = self.search_var.get().strip().lower()
+
+        for sale_id, customer, payment, total, sale_date in sales:
+
+            customer_name = customer.title() if customer else "Walk-in Customer"
+
+            if search_text:
+                if search_text not in customer_name.lower():
+                    continue
+
+            invoice = f"INV{sale_id:04d}"
+
+            self.sales_table.insert(
+                "",
+                "end",
+                values=(
+                    invoice,
+                    customer_name,
+                    payment,
+                    f"₹{float(total):.2f}",
+                    sale_date.strftime("%d-%b-%Y")
+                )
+            )
     # ==========================================================
     # DRAW MONTHLY REVENUE CHART
     # ==========================================================

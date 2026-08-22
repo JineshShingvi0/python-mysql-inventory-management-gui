@@ -75,8 +75,51 @@ def update_product(product_id, name, category,
         minimum_stock,
         product_id
     )
-
+    
     cursor.execute(query, values)
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+    return True
+
+# ==========================================================
+# ADD STOCK TO PRODUCT
+# ==========================================================
+
+def add_stock(product_id, quantity_added):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    # Get current stock
+    cursor.execute(
+        "SELECT stock FROM products WHERE product_id=%s",
+        (product_id,)
+    )
+
+    current_stock = cursor.fetchone()[0]
+    new_stock = current_stock + quantity_added
+
+    # Update stock
+    cursor.execute(
+        "UPDATE products SET stock=%s WHERE product_id=%s",
+        (new_stock, product_id)
+    )
+
+    # Record stock movement
+    cursor.execute("""
+        INSERT INTO stock_movements
+        (product_id, movement_type, quantity, stock_after)
+        VALUES (%s, %s, %s, %s)
+    """, (
+        product_id,
+        "STOCK IN",
+        quantity_added,
+        new_stock
+    ))
 
     connection.commit()
 
@@ -357,34 +400,60 @@ def add_sale_items(sale_id, cart):
     connection = get_connection()
     cursor = connection.cursor()
 
-    query = """
-        INSERT INTO sale_items (
-            sale_id,
-            product_id,
-            quantity,
-            selling_price,
-            subtotal
-        )
-        VALUES (%s, %s, %s, %s, %s)
-    """
-
     for item in cart:
 
+        # 1️⃣ Save sold item into sale_items table
+        cursor.execute("""
+            INSERT INTO sale_items
+            (sale_id, product_id, quantity, selling_price, subtotal)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            sale_id,
+            item["id"],
+            item["quantity"],
+            item["price"],
+            item["subtotal"]
+        ))
+
+        # 2️⃣ Get current stock
         cursor.execute(
-            query,
-            (
-                sale_id,
-                item["id"],
-                item["quantity"],
-                item["price"],      # GUI cart stores selling price in "price"
-                item["subtotal"]
-            )
+            "SELECT stock FROM products WHERE product_id=%s",
+            (item["id"],)
         )
 
+        current_stock = cursor.fetchone()[0]
+
+        stock_after = current_stock - item["quantity"]
+
+        # 3️⃣ Update stock in products table
+        cursor.execute("""
+            UPDATE products
+            SET stock=%s
+            WHERE product_id=%s
+        """, (
+            stock_after,
+            item["id"]
+        ))
+
+        # 4️⃣ Record SALE movement  ← ADD HERE
+        cursor.execute("""
+            INSERT INTO stock_movements
+            (product_id, movement_type, quantity, stock_after)
+            VALUES (%s, %s, %s, %s)
+        """, (
+            item["id"],
+            "SALE",
+            item["quantity"],
+            stock_after
+        ))
+
+    # 5️⃣ Commit once after the loop
     connection.commit()
 
     cursor.close()
     connection.close()
+
+    return True
 
 # ==========================================================
 # UPDATE PRODUCT STOCK AFTER SALE
@@ -840,3 +909,185 @@ def get_monthly_sales():
     connection.close()
 
     return data
+
+# ==========================================================
+# INVENTORY VALUE SUMMARY
+# ==========================================================
+
+def get_inventory_value():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(purchase_price * stock),0),
+            COALESCE(SUM(selling_price * stock),0)
+        FROM products
+    """)
+
+    purchase_value, selling_value = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    purchase_value = float(purchase_value)
+    selling_value = float(selling_value)
+
+    return {
+        "purchase_value": purchase_value,
+        "selling_value": selling_value,
+        "expected_profit": selling_value - purchase_value
+    }
+
+# ==========================================================
+# STOCK MOVEMENT HISTORY
+# ==========================================================
+
+def get_stock_movements(limit=20):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            sm.movement_date,
+            p.name,
+            sm.movement_type,
+            sm.quantity,
+            sm.stock_after
+        FROM stock_movements sm
+        JOIN products p
+            ON sm.product_id = p.product_id
+        ORDER BY sm.movement_id DESC
+        LIMIT %s
+    """, (limit,))
+
+    movements = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return movements
+
+# ==========================================================
+# SALES HISTORY / LEDGER
+# ==========================================================
+
+def get_sales_history():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            s.sale_id,
+            c.name,
+            s.payment_method,
+            s.total_amount,
+            s.sale_date
+        FROM sales s
+        LEFT JOIN customers c
+            ON s.customer_id = c.customer_id
+        ORDER BY s.sale_id DESC
+    """)
+
+    sales = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return sales
+
+# ==========================================================
+# PAYMENT ANALYTICS
+# ==========================================================
+
+def get_payment_analytics():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            payment_method,
+            COALESCE(SUM(total_amount),0),
+            COUNT(*)
+        FROM sales
+        GROUP BY payment_method
+    """)
+
+    result = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    analytics = {
+        "Cash": {"amount":0,"count":0},
+        "UPI": {"amount":0,"count":0},
+        "Card": {"amount":0,"count":0}
+    }
+
+    for payment, amount, count in result:
+        analytics[payment] = {
+            "amount": float(amount),
+            "count": count
+        }
+
+    # Most used payment method
+    most_used = max(
+        ["Cash", "UPI", "Card"],
+        key=lambda method: analytics[method]["amount"]
+    )
+
+    analytics["most_used"] = most_used
+
+    return analytics
+
+# ==========================================================
+# INVENTORY HEALTH ANALYTICS
+# ==========================================================
+
+def get_inventory_health():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT stock, minimum_stock
+        FROM products
+    """)
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    total_products = len(products)
+
+    healthy = 0
+    low_stock = 0
+    out_of_stock = 0
+
+    for stock, minimum in products:
+
+        if stock == 0:
+            out_of_stock += 1
+
+        elif stock <= minimum:
+            low_stock += 1
+
+        else:
+            healthy += 1
+
+    score = 0
+
+    if total_products > 0:
+        score = round((healthy / total_products) * 100)
+
+    return {
+        "healthy": healthy,
+        "low_stock": low_stock,
+        "out_of_stock": out_of_stock,
+        "score": score
+    }

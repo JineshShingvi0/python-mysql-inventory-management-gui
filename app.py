@@ -1,5 +1,6 @@
 import customtkinter as ctk
 from PIL import Image
+from tkinter import ttk
 from gui.products import ProductsPage
 from gui.billing import BillingPage
 from gui.customers import CustomersPage
@@ -18,6 +19,13 @@ class ShingviSupermartApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
+        # ==========================================
+        # Smooth Mouse Wheel Scrolling
+        # ==========================================
+        
+        self.bind_all("<MouseWheel>", self._smooth_scroll)      # Windows
+        self.bind_all("<Button-4>", self._smooth_scroll)        # Linux Scroll Up
+        self.bind_all("<Button-5>", self._smooth_scroll)        # Linux Scroll Down
         # -----------------------------
         # WINDOW SETTINGS
         # -----------------------------
@@ -27,6 +35,47 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
+
+        # ==========================================================
+        # GLOBAL TREEVIEW STYLE (Professional Tables)
+        # ==========================================================
+
+        style = ttk.Style()
+
+        style.theme_use("default")
+
+        # Main table style
+        style.configure(
+            "Treeview",
+            background="#FFFFFF",
+            foreground="#111827",
+            fieldbackground="#FFFFFF",
+            rowheight=34,
+            borderwidth=0,
+            font=("Poppins", 12)
+        )
+
+        # Table headings
+        style.configure(
+            "Treeview.Heading",
+            background="#065F46",
+            foreground="white",
+            font=("Poppins", 13, "bold"),
+            relief="flat",
+            padding=8
+        )
+
+        style.map(
+            "Treeview.Heading",
+            background=[("active", "#047857")]
+        )
+
+        # Selected row style
+        style.map(
+            "Treeview",
+            background=[("selected", "#16A34A")],
+            foreground=[("selected", "white")]
+        )
 
         # -----------------------------
         # SIDEBAR
@@ -304,6 +353,8 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.billing_page.pack(fill="both", expand=True)
 
+        self.highlight_button(self.billing_btn)
+
     def show_customers(self):
 
         self.hide_all_pages()
@@ -312,11 +363,13 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.customers_page.load_customers()
 
+        self.highlight_button(self.customers_btn)
+
     def show_reports(self):
         self.hide_all_pages()
         self.reports_page.pack(fill="both", expand=True)
         self.reports_page.load_reports()
-        
+        self.highlight_button(self.reports_btn)
     # ==========================================================
     # THEME
     # ==========================================================
@@ -324,6 +377,40 @@ class ShingviSupermartApp(ctk.CTk):
         ctk.set_appearance_mode(mode)
 
 
+    # ==========================================================
+    # SMOOTH SCROLL (Works for all pages)
+    # ==========================================================
+    def _smooth_scroll(self, event):
+        try:
+            # Linux
+            if hasattr(event, "num"):
+                if event.num == 4:
+                    delta = -1
+                elif event.num == 5:
+                    delta = 1
+                else:
+                    delta = 0
+            else:
+                # Windows / macOS
+                delta = int(-event.delta / 120)
+
+            widget = self.focus_get()
+
+            while widget:
+                    # Skip drawing canvases (charts, graphs, etc.)
+                    if widget.winfo_class() == "Canvas":
+                        widget = widget.master
+                        continue
+
+                    # Scroll only real scrollable widgets
+                    if hasattr(widget, "yview_scroll"):
+                        widget.yview_scroll(delta, "units")
+                        break
+
+                    widget = widget.master
+
+        except Exception:
+            pass
 # ==========================================================
 # RUN APP
 # ==========================================================

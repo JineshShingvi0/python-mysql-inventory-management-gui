@@ -4,6 +4,7 @@ from backend import (
     get_all_products,
     add_product,
     update_product,
+    add_stock,
     delete_product,
     get_product_by_id,
     search_products
@@ -87,6 +88,16 @@ class ProductsPage(ctk.CTkFrame):
             command=self.open_update_product_popup
         )
         self.update_button.pack(side="left", padx=5)
+
+        self.stock_button = ctk.CTkButton(
+            right_buttons,
+            text="📦 Add Stock",
+            width=130,
+            fg_color="#EA580C",
+            hover_color="#C2410C",
+            command=self.open_add_stock_popup
+        )
+        self.stock_button.pack(side="left", padx=5)
 
         self.add_button = ctk.CTkButton(
             right_buttons,
@@ -470,6 +481,110 @@ class ProductsPage(ctk.CTkFrame):
             command=update_selected_product
         ).pack(pady=15)
 
+    # ==========================================================
+    # ADD STOCK POPUP (DAY 9)
+    # ==========================================================
+
+    def open_add_stock_popup(self):
+
+        selected = self.table.selection()
+
+        if not selected:
+            messagebox.showwarning(
+                "No Product Selected",
+                "Please select a product first."
+            )
+            return
+
+        values = self.table.item(selected[0], "values")
+
+        product_id = int(values[0])
+        product_name = values[1]
+        current_stock = int(values[4])
+
+        popup = ctk.CTkToplevel(self)
+        popup.title("Add Stock")
+        popup.geometry("420x330")
+        popup.resizable(False, False)
+        popup.grab_set()
+        popup.configure(fg_color="white")
+
+        ctk.CTkLabel(
+            popup,
+            text="📦 Add Stock",
+            font=("Poppins", 22, "bold"),
+            text_color="#EA580C"
+        ).pack(pady=(20, 10))
+
+        ctk.CTkLabel(
+            popup,
+            text=f"Product: {product_name.title()}",
+            font=("Poppins", 14, "bold")
+        ).pack()
+
+        ctk.CTkLabel(
+            popup,
+            text=f"Current Stock: {current_stock}",
+            font=("Poppins", 13),
+            text_color="gray40"
+        ).pack(pady=(0, 15))
+
+        quantity_var = ctk.StringVar()
+
+        ctk.CTkLabel(
+            popup,
+            text="Quantity to Add",
+            font=("Poppins", 13, "bold")
+        ).pack(anchor="w", padx=30)
+
+        quantity_entry = ctk.CTkEntry(
+            popup,
+            textvariable=quantity_var,
+            width=340,
+            height=40
+        )
+        quantity_entry.pack(padx=30, pady=8)
+
+        status = ctk.CTkLabel(popup, text="")
+        status.pack()
+
+        def save_stock():
+
+            try:
+                quantity_to_add = int(quantity_var.get())
+
+                if quantity_to_add <= 0:
+                    raise ValueError
+
+            except ValueError:
+                status.configure(
+                    text="Enter a valid stock quantity.",
+                    text_color="red"
+                )
+                return
+
+            # Backend function
+            add_stock(product_id, quantity_to_add)
+
+            popup.destroy()
+
+            self.load_products()
+
+            messagebox.showinfo(
+                "Stock Updated",
+                f"{quantity_to_add} units added to {product_name.title()}."
+            )
+
+        ctk.CTkButton(
+            popup,
+            text="Add Stock",
+            width=340,
+            height=42,
+            fg_color="#EA580C",
+            hover_color="#C2410C",
+            command=save_stock
+        ).pack(pady=20)
+        
     # ==========================================================
     # DELETE PRODUCT POPUP
     # ==========================================================
