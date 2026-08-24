@@ -38,7 +38,17 @@ class ShingviSupermartApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-        
+        # ==========================================================
+        # SAFE APPLICATION CLOSE
+        # ==========================================================
+
+        self.protocol(
+            "WM_DELETE_WINDOW",
+            self.close_app
+        )
+
+        self._closing = False
+                
         self.dashboard_revenue_var = ctk.StringVar(value="₹0")
         self.dashboard_orders_var = ctk.StringVar(value="0")
         self.dashboard_inventory_var = ctk.StringVar(value="₹0")
@@ -1110,6 +1120,55 @@ class ShingviSupermartApp(ctk.CTk):
         self.reports_page.pack(fill="both", expand=True)
         self.reports_page.load_reports()
         self.highlight_button(self.reports_btn)
+
+    # ==========================================================
+    # SAFE APPLICATION SHUTDOWN
+    # ==========================================================
+
+    def close_app(self):
+
+        if self._closing:
+            return
+
+        self._closing = True
+
+        try:
+            # Stop dashboard clock
+            if hasattr(self, "dashboard_clock_job"):
+                try:
+                    self.after_cancel(
+                        self.dashboard_clock_job
+                    )
+                except Exception:
+                    pass
+
+            # Remove global mouse bindings
+            self.unbind_all("<MouseWheel>")
+            self.unbind_all("<Button-4>")
+            self.unbind_all("<Button-5>")
+
+            # Remove keyboard bindings
+            self.unbind_all("<Return>")
+            self.unbind_all("<plus>")
+            self.unbind_all("<KP_Add>")
+            self.unbind_all("<minus>")
+            self.unbind_all("<KP_Subtract>")
+            self.unbind_all("<Delete>")
+            self.unbind_all("<Control-b>")
+            self.unbind_all("<Escape>")
+            self.unbind_all("<F2>")
+            self.unbind_all("<F3>")
+            self.unbind_all("<F4>")
+            self.unbind_all("<F5>")
+
+        except Exception:
+            pass
+
+        try:
+            self.destroy()
+        except Exception:
+            pass
+
     # ==========================================================
     # THEME
     # ==========================================================
@@ -1154,7 +1213,11 @@ class ShingviSupermartApp(ctk.CTk):
             now.strftime("%I:%M:%S %p")
         )
 
-        self.clock_job = self.after(1000, self.update_dashboard_clock)
+        if not self._closing:
+            self.dashboard_clock_job = self.after(
+                1000,
+                self.update_dashboard_clock
+            )
     # ==========================================================
     # SMOOTH SCROLL (Works for all pages)
     # ==========================================================

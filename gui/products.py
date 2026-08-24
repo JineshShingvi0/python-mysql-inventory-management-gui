@@ -3,13 +3,14 @@ from tkinter import ttk, messagebox
 from backend import (
     get_all_products,
     add_product,
+    add_product_with_barcode,
     update_product,
     add_stock,
     delete_product,
     get_product_by_id,
     search_products,
     get_products_with_barcodes,
-    update_product_barcode
+    update_product_barcode,
 )
 
 
@@ -206,52 +207,120 @@ class ProductsPage(ctk.CTkFrame):
     # ==========================================================
     def open_add_product_popup(self):
 
+        # ======================================================
+        # CREATE POPUP
+        # ======================================================
+
         popup = ctk.CTkToplevel(self)
+
         popup.title("Add Product")
-        popup.geometry("500x640")
+        popup.geometry("520x680")
+        popup.minsize(520, 680)
+        popup.maxsize(520, 680)
         popup.resizable(False, False)
+
         popup.grab_set()
-        popup.configure(fg_color="white")
+        popup.configure(
+            fg_color="white"
+        )
+
+        # ======================================================
+        # TITLE
+        # ======================================================
 
         ctk.CTkLabel(
             popup,
             text="Add Product",
             font=("Poppins", 24, "bold"),
             text_color="#16A34A"
-        ).pack(pady=20)
+        ).pack(
+            pady=(15, 10)
+        )
+
+        # ======================================================
+        # SCROLLABLE FORM
+        # ======================================================
+
+        form_frame = ctk.CTkScrollableFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        form_frame.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 5)
+        )
+
+        # ======================================================
+        # VARIABLES
+        # ======================================================
 
         name_var = ctk.StringVar()
-        category_var = ctk.StringVar(value="Oil")
+        category_var = ctk.StringVar(
+            value="Oil"
+        )
         purchase_var = ctk.StringVar()
         selling_var = ctk.StringVar()
         stock_var = ctk.StringVar()
         minimum_var = ctk.StringVar()
+        barcode_var = ctk.StringVar()
+
+        # ======================================================
+        # FIELD HELPER
+        # ======================================================
 
         def field(label, variable):
+
             ctk.CTkLabel(
-                popup,
+                form_frame,
                 text=label,
                 font=("Poppins", 13, "bold")
-            ).pack(anchor="w", padx=35, pady=(8, 2))
+            ).pack(
+                anchor="w",
+                padx=20,
+                pady=(6, 2)
+            )
 
             entry = ctk.CTkEntry(
-                popup,
+                form_frame,
                 textvariable=variable,
                 width=430,
-                height=38
+                height=36
             )
-            entry.pack(padx=35)
 
-        field("Product Name", name_var)
+            entry.pack(
+                padx=20
+            )
+
+            return entry
+
+        # ======================================================
+        # PRODUCT NAME
+        # ======================================================
+
+        field(
+            "Product Name",
+            name_var
+        )
+
+        # ======================================================
+        # CATEGORY
+        # ======================================================
 
         ctk.CTkLabel(
-            popup,
+            form_frame,
             text="Category",
             font=("Poppins", 13, "bold")
-        ).pack(anchor="w", padx=35, pady=(8, 2))
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(6, 2)
+        )
 
         combo = ctk.CTkComboBox(
-            popup,
+            form_frame,
             values=[
                 "Oil",
                 "Grocery",
@@ -263,19 +332,87 @@ class ProductsPage(ctk.CTkFrame):
             ],
             variable=category_var,
             width=430,
-            height=38
+            height=36
         )
-        combo.pack(padx=35)
 
-        field("Purchase Price", purchase_var)
-        field("Selling Price", selling_var)
-        field("Stock Quantity", stock_var)
-        field("Minimum Stock", minimum_var)
+        combo.pack(
+            padx=20
+        )
 
-        status = ctk.CTkLabel(popup, text="")
-        status.pack(pady=8)
+        # ======================================================
+        # OTHER FIELDS
+        # ======================================================
+
+        field(
+            "Purchase Price",
+            purchase_var
+        )
+
+        field(
+            "Selling Price",
+            selling_var
+        )
+
+        field(
+            "Stock Quantity",
+            stock_var
+        )
+
+        field(
+            "Minimum Stock",
+            minimum_var
+        )
+
+        field(
+            "Barcode",
+            barcode_var
+        )
+
+        ctk.CTkLabel(
+            form_frame,
+            text="Leave barcode empty if the product has no barcode.",
+            font=("Poppins", 10),
+            text_color="#64748B"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(3, 12)
+        )
+
+        # ======================================================
+        # FIXED BOTTOM AREA
+        # ======================================================
+
+        bottom_frame = ctk.CTkFrame(
+            popup,
+            fg_color="white"
+        )
+
+        bottom_frame.pack(
+            fill="x",
+            padx=15,
+            pady=(0, 10)
+        )
+
+        status = ctk.CTkLabel(
+            bottom_frame,
+            text="",
+            font=("Poppins", 11)
+        )
+
+        status.pack(
+            pady=(0, 5)
+        )
+
+        # ======================================================
+        # SAVE PRODUCT
+        # ======================================================
 
         def save_product():
+
+            # --------------------------------------------------
+            # VALIDATION
+            # --------------------------------------------------
 
             if (
                 not name_var.get().strip()
@@ -284,49 +421,124 @@ class ProductsPage(ctk.CTkFrame):
                 or not stock_var.get().strip()
                 or not minimum_var.get().strip()
             ):
+
                 status.configure(
                     text="Please fill all fields.",
                     text_color="red"
                 )
+
                 return
 
+            # --------------------------------------------------
+            # NUMBER VALIDATION
+            # --------------------------------------------------
+
             try:
-                purchase_price = float(purchase_var.get())
-                selling_price = float(selling_var.get())
-                stock = int(stock_var.get())
-                minimum_stock = int(minimum_var.get())
+
+                purchase_price = float(
+                    purchase_var.get().strip()
+                )
+
+                selling_price = float(
+                    selling_var.get().strip()
+                )
+
+                stock = int(
+                    stock_var.get().strip()
+                )
+
+                minimum_stock = int(
+                    minimum_var.get().strip()
+                )
 
             except ValueError:
+
                 status.configure(
                     text="Invalid numbers.",
                     text_color="red"
                 )
+
                 return
 
-            if purchase_price <= 0 or selling_price <= 0:
+            # --------------------------------------------------
+            # VALUE VALIDATION
+            # --------------------------------------------------
+
+            if purchase_price <= 0:
+
                 status.configure(
-                    text="Prices must be greater than 0.",
+                    text="Purchase price must be greater than 0.",
                     text_color="red"
                 )
+
                 return
 
-            if stock < 0 or minimum_stock < 0:
+            if selling_price <= 0:
+
                 status.configure(
-                    text="Stock values cannot be negative.",
+                    text="Selling price must be greater than 0.",
                     text_color="red"
                 )
+
                 return
 
-            add_product(
+            if stock < 0:
+
+                status.configure(
+                    text="Stock cannot be negative.",
+                    text_color="red"
+                )
+
+                return
+
+            if minimum_stock < 0:
+
+                status.configure(
+                    text="Minimum stock cannot be negative.",
+                    text_color="red"
+                )
+
+                return
+
+            # --------------------------------------------------
+            # BARCODE
+            # --------------------------------------------------
+
+            barcode = barcode_var.get().strip()
+
+            # --------------------------------------------------
+            # SAVE PRODUCT WITH BARCODE
+            # --------------------------------------------------
+
+            success, result = add_product_with_barcode(
                 name_var.get().strip().lower(),
                 category_var.get().strip().lower(),
                 purchase_price,
                 selling_price,
                 stock,
-                minimum_stock
+                minimum_stock,
+                barcode
             )
 
+            # --------------------------------------------------
+            # ERROR
+            # --------------------------------------------------
+
+            if not success:
+
+                status.configure(
+                    text=str(result),
+                    text_color="red"
+                )
+
+                return
+
+            # --------------------------------------------------
+            # SUCCESS
+            # --------------------------------------------------
+
             popup.destroy()
+
             self.load_products()
 
             messagebox.showinfo(
@@ -334,15 +546,22 @@ class ProductsPage(ctk.CTkFrame):
                 "Product added successfully!"
             )
 
+        # ======================================================
+        # FIXED SAVE BUTTON
+        # ======================================================
+
         ctk.CTkButton(
-            popup,
-            text="Save Product",
+            bottom_frame,
+            text="💾 Save Product",
             width=430,
-            height=45,
+            height=42,
             fg_color="#16A34A",
             hover_color="#15803D",
+            font=("Poppins", 14, "bold"),
             command=save_product
-        ).pack(pady=15)
+        ).pack(
+            pady=(0, 2)
+        )
 
     # ==========================================================
     # UPDATE PRODUCT POPUP

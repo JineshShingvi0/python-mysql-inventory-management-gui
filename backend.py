@@ -47,6 +47,98 @@ def add_product(name, category, purchase_price, selling_price, stock, minimum_st
 
     return True
 
+# ==========================================================
+# ADD PRODUCT WITH BARCODE
+# ==========================================================
+
+def add_product_with_barcode(
+    name,
+    category,
+    purchase_price,
+    selling_price,
+    stock,
+    minimum_stock,
+    barcode
+):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        # ------------------------------------------
+        # Check duplicate barcode
+        # ------------------------------------------
+
+        barcode = barcode.strip()
+
+        if barcode:
+
+            cursor.execute(
+                """
+                SELECT product_id
+                FROM products
+                WHERE barcode = %s
+                """,
+                (barcode,)
+            )
+
+            existing = cursor.fetchone()
+
+            if existing:
+
+                return False, (
+                    "Barcode already belongs to another product."
+                )
+
+        # ------------------------------------------
+        # Insert product
+        # ------------------------------------------
+
+        cursor.execute(
+            """
+            INSERT INTO products
+            (
+                barcode,
+                name,
+                category,
+                purchase_price,
+                selling_price,
+                stock,
+                minimum_stock
+            )
+            VALUES (%s, %s, %s, %s, %s, %s, %s)
+            """,
+            (
+                barcode if barcode else None,
+                name,
+                category,
+                purchase_price,
+                selling_price,
+                stock,
+                minimum_stock
+            )
+        )
+
+        product_id = cursor.lastrowid
+
+        connection.commit()
+
+        return True, product_id
+
+    except Exception as error:
+
+        connection.rollback()
+
+        return False, str(error)
+
+    finally:
+
+        cursor.close()
+        connection.close()
+
+
+        
 def update_product(product_id, name, category,
                    purchase_price, selling_price,
                    stock, minimum_stock):

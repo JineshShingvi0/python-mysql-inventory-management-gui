@@ -43,7 +43,6 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ==========================================================
         # KEYBOARD POS CONTROLS
         # ==========================================================
-        self.bind_all("<Return>", self._keyboard_add_product)
         self.bind_all("<plus>", self._keyboard_increase)
         self.bind_all("<KP_Add>", self._keyboard_increase)
         self.bind_all("<minus>", self._keyboard_decrease)
@@ -310,11 +309,11 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         self.cart.append({
             "id": product["product_id"],
-            "name": product["name"],
+            "name": product["name"].title(),
             "price": float(product["selling_price"]),
             "quantity": 1,
             "subtotal": float(product["selling_price"])
-        })
+            })
 
         self.refresh_cart()
 
@@ -477,11 +476,6 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.calculate_summary(subtotal)
         self.update_receipt_preview()
 
-
-        self.customer_entry.bind(
-            "<KeyRelease>",
-            lambda event: self.update_receipt_preview()
-        )
     # ==========================================================
     # REMOVE SELECTED ITEM
     # ==========================================================
@@ -523,28 +517,75 @@ class BillingPage(ctk.CTkScrollableFrame):
             )
             return
 
-        product_name = self.cart_table.item(selected[0])["values"][0]
+        product_name = self.cart_table.item(
+            selected[0]
+        )["values"][0]
 
-        product = self.products_data[product_name]
+        # --------------------------------------------------
+        # Find the actual cart item
+        # --------------------------------------------------
+
+        cart_item = None
 
         for item in self.cart:
 
-            if item["name"] == product_name:
+            if item["name"].lower() == str(product_name).lower():
 
-                if item["quantity"] >= product["stock"]:
-                    messagebox.showerror(
-                        "Stock Error",
-                        "No more stock available."
-                    )
-                    return
-
-                item["quantity"] += 1
-                item["subtotal"] = item["quantity"] * item["price"]
-
+                cart_item = item
                 break
 
-        self.refresh_cart()
+        if cart_item is None:
 
+            messagebox.showerror(
+                "Cart Error",
+                "Unable to find the selected product in the cart."
+            )
+            return
+
+        # --------------------------------------------------
+        # Find product stock by PRODUCT ID
+        # --------------------------------------------------
+
+        product = None
+
+        for product_data in self.products_data.values():
+
+            if product_data["id"] == cart_item["id"]:
+
+                product = product_data
+                break
+
+        if product is None:
+
+            messagebox.showerror(
+                "Product Error",
+                "Unable to find product stock information."
+            )
+            return
+
+        # --------------------------------------------------
+        # Stock validation
+        # --------------------------------------------------
+
+        if cart_item["quantity"] >= product["stock"]:
+
+            messagebox.showerror(
+                "Stock Error",
+                "No more stock available."
+            )
+            return
+
+        # --------------------------------------------------
+        # Increase quantity
+        # --------------------------------------------------
+
+        cart_item["quantity"] += 1
+
+        cart_item["subtotal"] = (
+            cart_item["quantity"] * cart_item["price"]
+        )
+
+        self.refresh_cart()
         # ==========================================================
         # DECREASE PRODUCT QUANTITY
         # ==========================================================
@@ -609,6 +650,17 @@ class BillingPage(ctk.CTkScrollableFrame):
     # KEYBOARD POS CONTROLS
     # ==========================================================
 
+    def _billing_page_active(self):
+        """
+        Return True only when the Billing page is currently visible.
+        """
+
+        try:
+            return bool(self.winfo_ismapped())
+        except Exception:
+            return False
+
+        
     def _keyboard_add_product(self, event=None):
         """Add the currently selected product."""
 
@@ -616,91 +668,56 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         return "break"
 
-    def _keyboard_enter(self, event=None):
-        """
-        Smart Enter key:
-
-        Product / Quantity → Add product
-        Barcode → Scan barcode
-        Other fields → Do nothing
-        """
-
-        widget = self.focus_get()
-
-        # --------------------------------------------------
-        # Barcode field
-        # --------------------------------------------------
-        if widget is self.barcode_entry:
-            return self.scan_barcode(event)
-
-        # --------------------------------------------------
-        # Quantity field
-        # --------------------------------------------------
-        if widget is self.quantity_entry:
-            return self._keyboard_add_product(event)
-
-        # --------------------------------------------------
-        # Product ComboBox
-        # --------------------------------------------------
-        if widget is self.product_combo:
-            return self._keyboard_add_product(event)
-
-        # CTkComboBox internal entry
-        combo_entry = getattr(self.product_combo, "_entry", None)
-
-        if combo_entry is not None and widget is combo_entry:
-            return self._keyboard_add_product(event)
-
-        # --------------------------------------------------
-        # Anything else
-        # --------------------------------------------------
-        return
-
-    
     def _keyboard_increase(self, event=None):
         """
         + → Increase selected cart item.
         """
 
-        widget = self.focus_get()
+        try:
+            widget = self.focus_get()
+        except Exception:
+            return "break"
 
         if widget is not self.cart_table:
-            return
+            return "break"
 
         self.increase_quantity()
 
         return "break"
-
 
     def _keyboard_decrease(self, event=None):
         """
         - → Decrease selected cart item.
         """
 
-        widget = self.focus_get()
+        try:
+            widget = self.focus_get()
+        except Exception:
+            return "break"
 
         if widget is not self.cart_table:
-            return
+            return "break"
 
         self.decrease_quantity()
 
         return "break"
-
 
     def _keyboard_delete(self, event=None):
         """
         Delete → Remove selected cart item.
         """
 
-        widget = self.focus_get()
+        try:
+            widget = self.focus_get()
+        except Exception:
+            return "break"
 
         if widget is not self.cart_table:
-            return
+            return "break"
 
         self.remove_selected_item()
 
         return "break"
-
 
     def _keyboard_generate_bill(self, event=None):
         """
@@ -724,13 +741,17 @@ class BillingPage(ctk.CTkScrollableFrame):
     def _keyboard_focus_product(self, event=None):
         """F2 → Focus product selector."""
 
+        if not self._billing_page_active():
+            return "break"
+
         self.product_combo.focus_set()
 
         return "break"
 
-
     def _keyboard_focus_quantity(self, event=None):
-        """F4 → Focus quantity field."""
+
+        if not self._billing_page_active():
+            return "break"
 
         self.quantity_entry.focus_set()
         self.quantity_entry.select_range(0, "end")
@@ -739,20 +760,26 @@ class BillingPage(ctk.CTkScrollableFrame):
 
 
     def _keyboard_focus_phone(self, event=None):
-        """F5 → Focus customer phone field."""
+
+        if not self._billing_page_active():
+            return "break"
 
         self.phone_entry.focus_set()
         self.phone_entry.select_range(0, "end")
 
         return "break"
-
+    
     def _keyboard_focus_barcode(self, event=None):
-        """F3 → Focus barcode scanner field."""
+
+        if not self._billing_page_active():
+            return "break"
 
         self.barcode_entry.focus_set()
         self.barcode_entry.select_range(0, "end")
 
         return "break"
+
+    
     # ==========================================================
     # GENERATE COMPLETE BILL
     # ==========================================================
@@ -1052,9 +1079,14 @@ class BillingPage(ctk.CTkScrollableFrame):
         )
 
         self.barcode_entry.bind(
-            "<Return>",
-            self.scan_barcode
-        )
+                "<Return>",
+                self.scan_barcode
+            )
+
+        self.barcode_entry.bind(
+                "<KP_Enter>",
+                lambda event: self.scan_barcode(event)
+            )
         self.barcode_status = ctk.CTkLabel(
             product_frame,
             text="🟢 READY",
@@ -1139,6 +1171,11 @@ class BillingPage(ctk.CTkScrollableFrame):
             self._keyboard_add_product
         )
 
+        self.product_combo.bind(
+            "<KP_Enter>",
+            self._keyboard_add_product
+        )
+
         combo_entry = getattr(
             self.product_combo,
             "_entry",
@@ -1146,8 +1183,14 @@ class BillingPage(ctk.CTkScrollableFrame):
         )
 
         if combo_entry is not None:
+
             combo_entry.bind(
                 "<Return>",
+                self._keyboard_add_product
+            )
+
+            combo_entry.bind(
+                "<KP_Enter>",
                 self._keyboard_add_product
             )
 
@@ -1171,6 +1214,11 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         self.quantity_entry.bind(
             "<Return>",
+            self._keyboard_add_product
+        )
+
+        self.quantity_entry.bind(
+            "<KP_Enter>",
             self._keyboard_add_product
         )
 
