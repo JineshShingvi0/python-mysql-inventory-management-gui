@@ -179,6 +179,91 @@ def get_product_by_barcode(barcode):
 
     return product
 
+# ==========================================================
+# UPDATE PRODUCT BARCODE
+# ==========================================================
+
+def update_product_barcode(product_id, barcode):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    barcode = barcode.strip()
+
+    # Empty barcode means remove barcode
+    if barcode == "":
+        cursor.execute(
+            """
+            UPDATE products
+            SET barcode = NULL
+            WHERE product_id = %s
+            """,
+            (product_id,)
+        )
+
+    else:
+        # Check duplicate
+        cursor.execute(
+            """
+            SELECT product_id
+            FROM products
+            WHERE barcode = %s
+            AND product_id != %s
+            """,
+            (barcode, product_id)
+        )
+
+        existing = cursor.fetchone()
+
+        if existing:
+            cursor.close()
+            connection.close()
+            return False
+
+        cursor.execute(
+            """
+            UPDATE products
+            SET barcode = %s
+            WHERE product_id = %s
+            """,
+            (barcode, product_id)
+        )
+
+    connection.commit()
+
+    cursor.close()
+    connection.close()
+
+    return True
+
+# ==========================================================
+# GET PRODUCTS WITH BARCODE
+# ==========================================================
+
+def get_products_with_barcodes():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            product_id,
+            name,
+            category,
+            selling_price,
+            stock,
+            barcode
+        FROM products
+        ORDER BY product_id
+    """)
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return products
+
 
 # ==========================================================
 # DELETE PRODUCT
