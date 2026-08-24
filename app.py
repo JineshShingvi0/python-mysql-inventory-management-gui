@@ -20,7 +20,9 @@ from backend import (
     get_dashboard_inventory_alerts,
     get_weekly_sales,
     get_dashboard_insights,
-    get_dashboard_top_products
+    get_dashboard_top_products,
+    get_today_business_snapshot,
+    get_today_customer_loyalty_snapshot
 )
 
 
@@ -69,6 +71,8 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
+
+        self.clock_job = None
 
         # ==========================================================
         # GLOBAL TREEVIEW STYLE (Professional Tables)
@@ -244,7 +248,7 @@ class ShingviSupermartApp(ctk.CTk):
         # Show Dashboard First
         self.show_dashboard()
         self.update_dashboard_clock()
-
+        self.protocol("WM_DELETE_WINDOW", self.close_app)
     # ==========================================================
     # SIDEBAR BUTTON
     # ==========================================================
@@ -1113,6 +1117,16 @@ class ShingviSupermartApp(ctk.CTk):
         ctk.set_appearance_mode(mode)
 
     # ==========================================================
+    # CLOSE APPLICATION CLEANLY
+    # ==========================================================
+    def close_app(self):
+
+        if self.clock_job is not None:
+            self.after_cancel(self.clock_job)
+
+        self.destroy()
+        
+    # ==========================================================
     # DASHBOARD LIVE CLOCK
     # ==========================================================
     def update_dashboard_clock(self):
@@ -1140,7 +1154,7 @@ class ShingviSupermartApp(ctk.CTk):
             now.strftime("%I:%M:%S %p")
         )
 
-        self.after(1000, self.update_dashboard_clock)
+        self.clock_job = self.after(1000, self.update_dashboard_clock)
     # ==========================================================
     # SMOOTH SCROLL (Works for all pages)
     # ==========================================================
@@ -1294,17 +1308,30 @@ class ShingviSupermartApp(ctk.CTk):
                 progress.pack(fill="x", padx=12, pady=(0,12))
 
                 progress.set(qty/max_qty)
-        # Snapshot Values
+        # =====================================================
+        # BUSINESS SNAPSHOT
+        # =====================================================
 
-        gst_today = revenue * 0.18
+        snapshot = get_today_business_snapshot()
 
-        discount_today = revenue * 0.03
+        gst_today = snapshot["gst"]
+        discount_today = snapshot["discount"]
 
-        self.snapshot_gst_var.set(f"₹{gst_today:,.0f}")
-        self.snapshot_discount_var.set(f"₹{discount_today:,.0f}")
+        self.snapshot_gst_var.set(
+            f"₹{gst_today:,.2f}"
+        )
 
-        self.snapshot_customer_var.set(str(orders))
-        self.snapshot_loyalty_var.set(str(orders * 4))
+        self.snapshot_discount_var.set(
+            f"₹{discount_today:,.2f}"
+        )
+
+        self.snapshot_customer_var.set(
+            str(orders)
+        )
+
+        self.snapshot_loyalty_var.set(
+            str(orders * 4)
+        )
 
         # =====================================================
         # SALES TARGET
@@ -1379,47 +1406,57 @@ class ShingviSupermartApp(ctk.CTk):
 
         insights = get_dashboard_insights()
 
+        colors = {
+            "🟢": "#DCFCE7",
+            "🟡": "#FEF3C7",
+            "🏆": "#DBEAFE",
+            "🔴": "#FEE2E2"
+        }
+
         for title, message in insights:
-            colors = {
-                "🟢":"#DCFCE7",
-                "🟡":"#FEF3C7",
-                "🏆":"#DBEAFE",
-                "🔴":"#FEE2E2"
-            }
 
-            for title, message in insights:
+            bg = "#F9FAFB"
 
-                bg = "#F9FAFB"
+            for emoji, color in colors.items():
+                if emoji in title:
+                    bg = color
+                    break
 
-                for emoji, color in colors.items():
-                    if emoji in title:
-                        bg = color
+            insight = ctk.CTkFrame(
+                self.insight_container,
+                fg_color=bg,
+                corner_radius=18,
+                border_width=1,
+                border_color="#E5E7EB"
+            )
 
-                insight = ctk.CTkFrame(
-                    self.insight_container,
-                    fg_color=bg,
-                    corner_radius=18,
-                    border_width=1,
-                    border_color="#E5E7EB"
-                )
+            insight.pack(
+                fill="x",
+                pady=8
+            )
 
-                insight.pack(fill="x", pady=8)
+            ctk.CTkLabel(
+                insight,
+                text=title,
+                font=("Poppins", 14, "bold"),
+                text_color="#065F46"
+            ).pack(
+                anchor="w",
+                padx=18,
+                pady=(12, 4)
+            )
 
-                ctk.CTkLabel(
-                    insight,
-                    text=title,
-                    font=("Poppins",14,"bold"),
-                    text_color="#065F46"
-                ).pack(anchor="w", padx=18, pady=(12,4))
-
-                ctk.CTkLabel(
-                    insight,
-                    text=message,
-                    wraplength=760,
-                    justify="left",
-                    font=("Poppins",12)
-                ).pack(anchor="w", padx=18, pady=(0,12))
-            
+            ctk.CTkLabel(
+                insight,
+                text=message,
+                wraplength=760,
+                justify="left",
+                font=("Poppins", 12)
+            ).pack(
+                anchor="w",
+                padx=18,
+                pady=(0, 12)
+            )
 
     def draw_weekly_chart(self, sales_data):
 

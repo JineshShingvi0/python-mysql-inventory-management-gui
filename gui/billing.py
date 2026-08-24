@@ -36,8 +36,23 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.build_ui()
 
         # Load products from database
-        self.load_products()
+        self.load_products()    
 
+        # ==========================================================
+        # KEYBOARD POS CONTROLS
+        # ==========================================================
+
+        self.bind_all("<plus>", self._keyboard_increase)
+        self.bind_all("<KP_Add>", self._keyboard_increase)
+        self.bind_all("<minus>", self._keyboard_decrease)
+        self.bind_all("<KP_Subtract>", self._keyboard_decrease)
+        self.bind_all("<Delete>", self._keyboard_delete)
+        self.bind_all("<Control-b>", self._keyboard_generate_bill)
+        self.bind_all("<Escape>", self._keyboard_escape)
+        self.bind_all("<F2>", self._keyboard_focus_product)
+
+        self.bind_all("<F4>", self._keyboard_focus_quantity)
+        self.bind_all("<F5>", self._keyboard_focus_phone)
     # ==========================================================
     # LOAD PRODUCTS FROM DATABASE
     # ==========================================================
@@ -205,6 +220,133 @@ class BillingPage(ctk.CTkScrollableFrame):
         # Reset quantity
         self.quantity_var.set("1")
 
+
+
+    # ==========================================================
+    # UPDATE LIVE RECEIPT PREVIEW
+    # ==========================================================
+
+    def update_receipt_preview(self):
+
+        # Customer
+        customer_name = (
+            self.customer_name_var.get().strip()
+            or "Walk-in Customer"
+        )
+
+        phone = (
+            self.phone_var.get().strip()
+            or "--"
+        )
+
+        payment = self.payment_method_var.get() or "Cash"
+
+        self.receipt_customer_var.set(
+            f"Customer: {customer_name}"
+        )
+
+        self.receipt_phone_var.set(
+            f"Phone: {phone}"
+        )
+
+        self.receipt_payment_var.set(
+            f"Payment: {payment}"
+        )
+
+        # Clear old products
+        for widget in self.receipt_items_frame.winfo_children():
+            widget.destroy()
+
+        # Empty cart
+        if not self.cart:
+
+            ctk.CTkLabel(
+                self.receipt_items_frame,
+                text="No items added yet",
+                font=("Poppins", 11),
+                text_color="#94A3B8"
+            ).pack(
+                pady=15
+            )
+
+        else:
+
+            for item in self.cart:
+
+                row = ctk.CTkFrame(
+                    self.receipt_items_frame,
+                    fg_color="transparent"
+                )
+
+                row.pack(
+                    fill="x",
+                    pady=3
+                )
+
+                product_text = (
+                    f"{item['name'].title()} × {item['quantity']}"
+                )
+
+                price_text = (
+                    f"₹{item['subtotal']:,.2f}"
+                )
+
+                ctk.CTkLabel(
+                    row,
+                    text=product_text,
+                    font=("Poppins", 11),
+                    anchor="w"
+                ).pack(
+                    side="left"
+                )
+
+                ctk.CTkLabel(
+                    row,
+                    text=price_text,
+                    font=("Poppins", 11),
+                    anchor="e"
+                ).pack(
+                    side="right"
+                )
+
+        # Totals
+        subtotal = sum(
+            item["subtotal"]
+            for item in self.cart
+        )
+
+        try:
+            discount_percent = float(
+                self.discount_percent_var.get() or 0
+            )
+        except ValueError:
+            discount_percent = 0
+
+        discount = subtotal * (
+            discount_percent / 100
+        )
+
+        taxable_amount = subtotal - discount
+
+        gst = taxable_amount * 0.18
+
+        grand_total = taxable_amount + gst
+
+        self.receipt_subtotal_var.set(
+            f"₹{subtotal:,.2f}"
+        )
+
+        self.receipt_discount_var.set(
+            f"₹{discount:,.2f}"
+        )
+
+        self.receipt_gst_var.set(
+            f"₹{gst:,.2f}"
+        )
+
+        self.receipt_total_var.set(
+            f"₹{grand_total:,.2f}"
+        )
     # ==========================================================
     # REFRESH BILLING CART TABLE
     # ==========================================================
@@ -232,6 +374,7 @@ class BillingPage(ctk.CTkScrollableFrame):
             )
 
         self.calculate_summary(subtotal)
+        self.update_receipt_preview()
 
     # ==========================================================
     # REMOVE SELECTED ITEM
@@ -355,6 +498,106 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.gst_var.set(f"₹{gst:.2f}")
         self.total_var.set(f"₹{grand_total:.2f}")
 
+
+    # ==========================================================
+    # KEYBOARD POS CONTROLS
+    # ==========================================================
+
+    def _keyboard_add_product(self, event=None):
+        """Enter → Add product from Product or Quantity field."""
+
+        self.add_item_to_cart()
+
+        return "break"
+
+    def _keyboard_increase(self, event=None):
+        """
+        + → Increase selected cart item.
+        """
+
+        widget = self.focus_get()
+
+        if widget is not self.cart_table:
+            return
+
+        self.increase_quantity()
+
+        return "break"
+
+
+    def _keyboard_decrease(self, event=None):
+        """
+        - → Decrease selected cart item.
+        """
+
+        widget = self.focus_get()
+
+        if widget is not self.cart_table:
+            return
+
+        self.decrease_quantity()
+
+        return "break"
+
+
+    def _keyboard_delete(self, event=None):
+        """
+        Delete → Remove selected cart item.
+        """
+
+        widget = self.focus_get()
+
+        if widget is not self.cart_table:
+            return
+
+        self.remove_selected_item()
+
+        return "break"
+
+
+    def _keyboard_generate_bill(self, event=None):
+        """
+        Ctrl+B → Generate bill.
+        """
+
+        self.generate_bill()
+
+        return "break"
+
+
+    def _keyboard_escape(self, event=None):
+        """
+        Escape → Move focus back to the Billing page.
+        """
+
+        self.focus_set()
+
+        return "break"
+
+    def _keyboard_focus_product(self, event=None):
+        """F2 → Focus product selector."""
+
+        self.product_combo.focus_set()
+
+        return "break"
+
+
+    def _keyboard_focus_quantity(self, event=None):
+        """F4 → Focus quantity field."""
+
+        self.quantity_entry.focus_set()
+        self.quantity_entry.select_range(0, "end")
+
+        return "break"
+
+
+    def _keyboard_focus_phone(self, event=None):
+        """F5 → Focus customer phone field."""
+
+        self.phone_entry.focus_set()
+        self.phone_entry.select_range(0, "end")
+
+        return "break"
     # ==========================================================
     # GENERATE COMPLETE BILL
     # ==========================================================
@@ -624,9 +867,15 @@ class BillingPage(ctk.CTkScrollableFrame):
             height=38
         )
 
+
         self.product_combo.grid(
             row=2, column=0, padx=20, pady=(5, 15), sticky="ew")
 
+
+        self.product_combo.bind(
+            "<Return>",
+            self._keyboard_add_product
+        )
         # Quantity
         ctk.CTkLabel(product_frame, text="Quantity").grid(
             row=1, column=1, sticky="w", padx=20)
@@ -640,6 +889,11 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.quantity_entry.grid(
             row=2, column=1, padx=20, pady=(5, 15), sticky="ew")
 
+        self.quantity_entry.bind(
+            "<Return>",
+            self._keyboard_add_product
+        )
+                
         # Add Button
         self.add_item_button = ctk.CTkButton(
             product_frame,
@@ -668,8 +922,8 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         ctk.CTkLabel(
             cart_frame,
-            text="Billing Cart",
-            font=("Poppins", 18, "bold"),
+            text="🛒 Current Cart",
+            font=("Poppins", 19, "bold"),
             text_color="#065F46"
         ).pack(anchor="w", padx=20, pady=(15, 10))
 
@@ -693,13 +947,37 @@ class BillingPage(ctk.CTkScrollableFrame):
             height=8
         )
 
+        self.cart_table.bind(
+            "<Double-1>",
+            lambda event: self.increase_quantity()
+        )
+
         for col in columns:
             self.cart_table.heading(col, text=col)
 
-        self.cart_table.column("Product", width=220)
-        self.cart_table.column("Price", width=110, anchor="center")
-        self.cart_table.column("Quantity", width=100, anchor="center")
-        self.cart_table.column("Subtotal", width=130, anchor="center")
+        self.cart_table.column(
+            "Product",
+            width=260,
+            anchor="w"
+        )
+
+        self.cart_table.column(
+            "Price",
+            width=120,
+            anchor="e"
+        )
+
+        self.cart_table.column(
+            "Quantity",
+            width=90,
+            anchor="center"
+        )
+
+        self.cart_table.column(
+            "Subtotal",
+            width=140,
+            anchor="e"
+        )
 
         scrollbar = ttk.Scrollbar(
             table_frame,
@@ -712,39 +990,377 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.cart_table.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
 
-        # ---------- Buttons ----------
-        button_panel = ctk.CTkFrame(cart_body, fg_color="transparent")
-        button_panel.grid(row=0, column=1, sticky="n")
-
-        self.plus_button = ctk.CTkButton(
-            button_panel,
-            text="➕ Quantity",
-            width=150,
-            fg_color="#16A34A",
-            hover_color="#15803D",
-            command=self.increase_quantity
+        # ---------- Cart Controls ----------
+        button_panel = ctk.CTkFrame(
+            cart_body,
+            fg_color="#F8FAFC",
+            corner_radius=16,
+            border_width=1,
+            border_color="#E5E7EB"
         )
-        self.plus_button.pack(fill="x", pady=(0, 10))
+
+        button_panel.grid(
+            row=0,
+            column=1,
+            sticky="ns",
+            padx=(0, 5),
+            pady=5
+        )
+
+        ctk.CTkLabel(
+            button_panel,
+            text="Cart Controls",
+            font=("Poppins", 13, "bold"),
+            text_color="#065F46"
+        ).pack(
+            padx=15,
+            pady=(15, 12)
+        )
+
+        # ---------------- Quantity Controls ----------------
+
+        quantity_frame = ctk.CTkFrame(
+            button_panel,
+            fg_color="transparent"
+        )
+
+        quantity_frame.pack(
+            padx=12,
+            pady=(0, 15)
+        )
 
         self.minus_button = ctk.CTkButton(
-            button_panel,
-            text="➖ Quantity",
-            width=150,
+            quantity_frame,
+            text="−",
+            width=42,
+            height=42,
+            corner_radius=12,
             fg_color="#F59E0B",
             hover_color="#D97706",
+            font=("Poppins", 18, "bold"),
             command=self.decrease_quantity
         )
-        self.minus_button.pack(fill="x", pady=(0, 10))
+
+        self.minus_button.grid(
+            row=0,
+            column=0,
+            padx=(0, 5)
+        )
+
+        ctk.CTkLabel(
+            quantity_frame,
+            text="Qty",
+            width=45,
+            font=("Poppins", 12, "bold"),
+            text_color="#475569"
+        ).grid(
+            row=0,
+            column=1,
+            padx=5
+        )
+
+        self.plus_button = ctk.CTkButton(
+            quantity_frame,
+            text="+",
+            width=42,
+            height=42,
+            corner_radius=12,
+            fg_color="#16A34A",
+            hover_color="#15803D",
+            font=("Poppins", 18, "bold"),
+            command=self.increase_quantity
+        )
+
+        self.plus_button.grid(
+            row=0,
+            column=2,
+            padx=(5, 0)
+        )
+
+        # ---------------- Remove Button ----------------
 
         self.remove_button = ctk.CTkButton(
             button_panel,
-            text="🗑 Remove Selected",
+            text="🗑 Remove Item",
             width=150,
+            height=40,
+            corner_radius=12,
             fg_color="#DC2626",
             hover_color="#B91C1C",
+            font=("Poppins", 12, "bold"),
             command=self.remove_selected_item
         )
-        self.remove_button.pack(fill="x")
+
+        self.remove_button.pack(
+            fill="x",
+            padx=12,
+            pady=(0, 15)
+        )
+
+        ctk.CTkLabel(
+                button_panel,
+                text="⌨ Keyboard\n"
+                    "F2  Product\n"
+                    "F4  Quantity\n"
+                    "F5  Phone\n"
+                    "Enter  Add Product\n"
+                    "+ / -  Change Qty\n"
+                    "Delete  Remove\n"
+                    "Ctrl+B  Generate Bill",
+                font=("Poppins", 10),
+                text_color="#64748B",
+                justify="left"
+            ).pack(
+                padx=12,
+                pady=(0, 15)
+            )
+        # ==========================================================
+        # LIVE RECEIPT PREVIEW
+        # ==========================================================
+
+        receipt_frame = ctk.CTkFrame(
+            self,
+            fg_color="#FFFFFF",
+            corner_radius=18,
+            border_width=1,
+            border_color="#D1D5DB"
+        )
+
+        receipt_frame.pack(
+            fill="x",
+            padx=30,
+            pady=10
+        )
+
+        # Header
+        receipt_header = ctk.CTkFrame(
+            receipt_frame,
+            fg_color="#ECFDF5",
+            corner_radius=14
+        )
+
+        receipt_header.pack(
+            fill="x",
+            padx=12,
+            pady=12
+        )
+
+        ctk.CTkLabel(
+            receipt_header,
+            text="🧾 Receipt Preview",
+            font=("Poppins", 19, "bold"),
+            text_color="#065F46"
+        ).pack(
+            side="left",
+            padx=15,
+            pady=12
+        )
+
+        ctk.CTkLabel(
+            receipt_header,
+            text="LIVE",
+            font=("Poppins", 10, "bold"),
+            text_color="#15803D",
+            fg_color="#DCFCE7",
+            corner_radius=12,
+            padx=10,
+            pady=4
+        ).pack(
+            side="right",
+            padx=15
+        )
+
+        # Receipt body
+        receipt_body = ctk.CTkFrame(
+            receipt_frame,
+            fg_color="#FAFAFA",
+            corner_radius=12
+        )
+
+        receipt_body.pack(
+            fill="x",
+            padx=12,
+            pady=(0, 12)
+        )
+
+        # Shop Name
+        ctk.CTkLabel(
+            receipt_body,
+            text="SHINGVI SUPERMART",
+            font=("Poppins", 20, "bold"),
+            text_color="#065F46"
+        ).pack(pady=(15, 2))
+
+        ctk.CTkLabel(
+            receipt_body,
+            text="Inventory Management System",
+            font=("Poppins", 11),
+            text_color="#64748B"
+        ).pack()
+
+        # Customer / Payment information
+        info_frame = ctk.CTkFrame(
+            receipt_body,
+            fg_color="transparent"
+        )
+
+        info_frame.pack(
+            fill="x",
+            padx=20,
+            pady=(15, 8)
+        )
+
+        self.receipt_customer_var = ctk.StringVar(
+            value="Customer: Walk-in Customer"
+        )
+
+        self.receipt_payment_var = ctk.StringVar(
+            value="Payment: Cash"
+        )
+
+        self.receipt_phone_var = ctk.StringVar(
+            value="Phone: --"
+        )
+
+        ctk.CTkLabel(
+            info_frame,
+            textvariable=self.receipt_customer_var,
+            font=("Poppins", 11, "bold")
+        ).grid(
+            row=0,
+            column=0,
+            sticky="w"
+        )
+
+        ctk.CTkLabel(
+            info_frame,
+            textvariable=self.receipt_payment_var,
+            font=("Poppins", 11, "bold")
+        ).grid(
+            row=0,
+            column=1,
+            sticky="e"
+        )
+
+        ctk.CTkLabel(
+            info_frame,
+            textvariable=self.receipt_phone_var,
+            font=("Poppins", 10),
+            text_color="#64748B"
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            pady=(4, 0)
+        )
+
+        info_frame.grid_columnconfigure(0, weight=1)
+        info_frame.grid_columnconfigure(1, weight=1)
+
+        # Separator
+        ctk.CTkFrame(
+            receipt_body,
+            height=1,
+            fg_color="#D1D5DB"
+        ).pack(
+            fill="x",
+            padx=20,
+            pady=8
+        )
+
+        # Product area
+        self.receipt_items_frame = ctk.CTkFrame(
+            receipt_body,
+            fg_color="transparent"
+        )
+
+        self.receipt_items_frame.pack(
+            fill="x",
+            padx=20,
+            pady=5
+        )
+
+        # Totals
+        receipt_totals = ctk.CTkFrame(
+            receipt_body,
+            fg_color="transparent"
+        )
+
+        receipt_totals.pack(
+            fill="x",
+            padx=20,
+            pady=(10, 15)
+        )
+
+        self.receipt_subtotal_var = ctk.StringVar(value="₹0.00")
+        self.receipt_discount_var = ctk.StringVar(value="₹0.00")
+        self.receipt_gst_var = ctk.StringVar(value="₹0.00")
+        self.receipt_total_var = ctk.StringVar(value="₹0.00")
+
+
+        def receipt_total_row(label, variable, bold=False):
+
+            row = ctk.CTkFrame(
+                receipt_totals,
+                fg_color="transparent"
+            )
+
+            row.pack(
+                fill="x",
+                pady=2
+            )
+
+            font_style = (
+                ("Poppins", 13, "bold")
+                if bold
+                else
+                ("Poppins", 11)
+            )
+
+            ctk.CTkLabel(
+                row,
+                text=label,
+                font=font_style
+            ).pack(side="left")
+
+            ctk.CTkLabel(
+                row,
+                textvariable=variable,
+                font=font_style,
+                text_color="#065F46" if bold else "#374151"
+            ).pack(side="right")
+
+
+        receipt_total_row(
+            "Subtotal",
+            self.receipt_subtotal_var
+        )
+
+        receipt_total_row(
+            "Discount",
+            self.receipt_discount_var
+        )
+
+        receipt_total_row(
+            "GST (18%)",
+            self.receipt_gst_var
+        )
+
+        ctk.CTkFrame(
+            receipt_totals,
+            height=1,
+            fg_color="#D1D5DB"
+        ).pack(
+            fill="x",
+            pady=6
+        )
+
+        receipt_total_row(
+            "GRAND TOTAL",
+            self.receipt_total_var,
+            bold=True
+        )
+
         # ======================================================
         # BILL SUMMARY
         # ======================================================

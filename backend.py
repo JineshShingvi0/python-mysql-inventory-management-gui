@@ -785,6 +785,77 @@ def get_today_orders():
     return orders
 
 # ==========================================================
+# TODAY'S BUSINESS SNAPSHOT
+# ==========================================================
+
+def get_today_business_snapshot():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(gst_amount), 0),
+            COALESCE(SUM(discount_amount), 0)
+        FROM sales
+        WHERE DATE(sale_date) = CURDATE()
+    """)
+
+    gst_today, discount_today = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return {
+        "gst": float(gst_today or 0),
+        "discount": float(discount_today or 0)
+    }
+
+
+
+
+# ==========================================================
+# TODAY'S CUSTOMER & LOYALTY SNAPSHOT
+# ==========================================================
+
+def get_today_customer_loyalty_snapshot():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    # New customers created today
+    cursor.execute("""
+        SELECT COUNT(*)
+        FROM customers
+        WHERE DATE(created_at) = CURDATE()
+    """)
+
+    new_customers = cursor.fetchone()[0]
+
+    # Loyalty points issued today
+    # Current loyalty rule: 1 point for every ₹100 of final bill amount
+    cursor.execute("""
+        SELECT
+            COALESCE(
+                SUM(FLOOR(total_amount / 100)),
+                0
+            )
+        FROM sales
+        WHERE DATE(sale_date) = CURDATE()
+    """)
+
+    loyalty_points = cursor.fetchone()[0]
+
+    cursor.close()
+    connection.close()
+
+    return {
+        "new_customers": int(new_customers or 0),
+        "loyalty_points": int(loyalty_points or 0)
+    }
+
+
+# ==========================================================
 # TOTAL PRODUCTS
 # ==========================================================
 
@@ -1188,7 +1259,7 @@ def get_recent_sales(limit=5):
     return sales
 
 # ==========================================================
-# PAYMENT ANALYTICS
+# TODAY'S PAYMENT ANALYTICS
 # ==========================================================
 
 def get_payment_analytics():
@@ -1199,9 +1270,10 @@ def get_payment_analytics():
     cursor.execute("""
         SELECT
             payment_method,
-            COALESCE(SUM(total_amount),0),
+            COALESCE(SUM(total_amount), 0),
             COUNT(*)
         FROM sales
+        WHERE DATE(sale_date) = CURDATE()
         GROUP BY payment_method
     """)
 
@@ -1210,19 +1282,32 @@ def get_payment_analytics():
     cursor.close()
     connection.close()
 
+    # Default values
     analytics = {
-        "Cash": {"amount":0,"count":0},
-        "UPI": {"amount":0,"count":0},
-        "Card": {"amount":0,"count":0}
+        "Cash": {
+            "amount": 0.0,
+            "count": 0
+        },
+        "UPI": {
+            "amount": 0.0,
+            "count": 0
+        },
+        "Card": {
+            "amount": 0.0,
+            "count": 0
+        }
     }
 
+    # Fill today's values
     for payment, amount, count in result:
-        analytics[payment] = {
-            "amount": float(amount),
-            "count": count
-        }
 
-    # Most used payment method
+        if payment in analytics:
+            analytics[payment] = {
+                "amount": float(amount or 0),
+                "count": int(count or 0)
+            }
+
+    # Most used payment method TODAY
     most_used = max(
         ["Cash", "UPI", "Card"],
         key=lambda method: analytics[method]["amount"]
@@ -1231,7 +1316,6 @@ def get_payment_analytics():
     analytics["most_used"] = most_used
 
     return analytics
-
 # ==========================================================
 # INVENTORY HEALTH ANALYTICS
 # ==========================================================
