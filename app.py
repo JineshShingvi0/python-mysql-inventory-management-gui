@@ -38,7 +38,7 @@ class ShingviSupermartApp(ctk.CTk):
     def __init__(self):
         super().__init__()
 
-
+        
         self.dashboard_revenue_var = ctk.StringVar(value="₹0")
         self.dashboard_orders_var = ctk.StringVar(value="0")
         self.dashboard_inventory_var = ctk.StringVar(value="₹0")
@@ -1325,14 +1325,19 @@ class ShingviSupermartApp(ctk.CTk):
             f"₹{discount_today:,.2f}"
         )
 
+        # =====================================================
+        # REAL CUSTOMER & LOYALTY SNAPSHOT
+        # =====================================================
+
+        customer_loyalty = get_today_customer_loyalty_snapshot()
+
         self.snapshot_customer_var.set(
-            str(orders)
+            str(customer_loyalty["new_customers"])
         )
 
         self.snapshot_loyalty_var.set(
-            str(orders * 4)
+            str(customer_loyalty["loyalty_points"])
         )
-
         # =====================================================
         # SALES TARGET
         # =====================================================

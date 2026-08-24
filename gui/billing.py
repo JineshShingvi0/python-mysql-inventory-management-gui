@@ -12,7 +12,8 @@ from backend import (
     create_sale,
     add_sale_items,
     update_stock_after_sale,
-    add_loyalty_points
+    add_loyalty_points,
+    get_product_by_barcode
 )
 
 from invoice import generate_invoice
@@ -28,6 +29,7 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         # ---------------- Billing Data ----------------
         self.cart = []              # Temporary billing cart
+        self.barcode_var = ctk.StringVar()
         self.products_data = {}     # Product lookup dictionary
 
         self.customer_id = None
@@ -41,7 +43,7 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ==========================================================
         # KEYBOARD POS CONTROLS
         # ==========================================================
-
+        self.bind_all("<Return>", self._keyboard_add_product)
         self.bind_all("<plus>", self._keyboard_increase)
         self.bind_all("<KP_Add>", self._keyboard_increase)
         self.bind_all("<minus>", self._keyboard_decrease)
@@ -50,7 +52,7 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.bind_all("<Control-b>", self._keyboard_generate_bill)
         self.bind_all("<Escape>", self._keyboard_escape)
         self.bind_all("<F2>", self._keyboard_focus_product)
-
+        self.bind_all("<F3>", self._keyboard_focus_barcode)
         self.bind_all("<F4>", self._keyboard_focus_quantity)
         self.bind_all("<F5>", self._keyboard_focus_phone)
     # ==========================================================
@@ -87,11 +89,15 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         phone = self.phone_var.get().strip()
 
-        # Wait until phone number is complete
+        # Incomplete phone number
         if len(phone) != 10:
+
             self.customer_name_var.set("")
             self.points_var.set("⭐ Loyalty Points : 0")
             self.customer_id = None
+
+            self.update_receipt_preview()
+
             return
 
         customer = get_customer_by_phone(phone)
@@ -100,7 +106,9 @@ class BillingPage(ctk.CTkScrollableFrame):
 
             self.customer_id = customer["customer_id"]
 
-            self.customer_name_var.set(customer["name"])
+            self.customer_name_var.set(
+                customer["name"]
+            )
 
             self.points_var.set(
                 f"⭐ Loyalty Points : {customer['loyalty_points']}"
@@ -116,6 +124,8 @@ class BillingPage(ctk.CTkScrollableFrame):
                 "⭐ Loyalty Points : New Customer"
             )
 
+        # Update receipt immediately
+        self.update_receipt_preview()
     # ==========================================================
     # FETCH CUSTOMER FROM PHONE NUMBER
     # ==========================================================
@@ -221,6 +231,97 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.quantity_var.set("1")
 
 
+    # ==========================================================
+    # BARCODE SCANNER
+    # ==========================================================
+
+    def scan_barcode(self, event=None):
+
+        barcode = self.barcode_var.get().strip()
+
+        if not barcode:
+            return "break"
+
+        product = get_product_by_barcode(barcode)
+
+        if not product:
+
+            messagebox.showerror(
+                "Barcode Not Found",
+                f"No product found for barcode:\n{barcode}"
+            )
+
+            self.barcode_var.set("")
+            self.barcode_entry.focus_set()
+
+            return "break"
+
+        # -----------------------------
+        # Stock Check
+        # -----------------------------
+
+        if product["stock"] <= 0:
+
+            messagebox.showerror(
+                "Out of Stock",
+                f"{product['name'].title()} is currently out of stock."
+            )
+
+            self.barcode_var.set("")
+            self.barcode_entry.focus_set()
+
+            return "break"
+
+        # -----------------------------
+        # Add to Existing Cart
+        # -----------------------------
+
+        for item in self.cart:
+
+            if item["id"] == product["product_id"]:
+
+                if item["quantity"] >= product["stock"]:
+
+                    messagebox.showerror(
+                        "Stock Limit",
+                        "No more stock available for this product."
+                    )
+
+                    self.barcode_var.set("")
+                    self.barcode_entry.focus_set()
+
+                    return "break"
+
+                item["quantity"] += 1
+                item["subtotal"] = (
+                    item["quantity"] * item["price"]
+                )
+
+                self.refresh_cart()
+
+                self.barcode_var.set("")
+                self.barcode_entry.focus_set()
+
+                return "break"
+
+        # -----------------------------
+        # Add New Product
+        # -----------------------------
+
+        self.cart.append({
+            "id": product["product_id"],
+            "name": product["name"],
+            "price": float(product["selling_price"]),
+            "quantity": 1,
+            "subtotal": float(product["selling_price"])
+        })
+
+        self.refresh_cart()
+
+        self.barcode_var.set("")
+        self.barcode_entry.focus_set()
+
+        return "break"
 
     # ==========================================================
     # UPDATE LIVE RECEIPT PREVIEW
@@ -376,6 +477,11 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.calculate_summary(subtotal)
         self.update_receipt_preview()
 
+
+        self.customer_entry.bind(
+            "<KeyRelease>",
+            lambda event: self.update_receipt_preview()
+        )
     # ==========================================================
     # REMOVE SELECTED ITEM
     # ==========================================================
@@ -504,12 +610,53 @@ class BillingPage(ctk.CTkScrollableFrame):
     # ==========================================================
 
     def _keyboard_add_product(self, event=None):
-        """Enter → Add product from Product or Quantity field."""
+        """Add the currently selected product."""
 
         self.add_item_to_cart()
 
         return "break"
 
+    def _keyboard_enter(self, event=None):
+        """
+        Smart Enter key:
+
+        Product / Quantity → Add product
+        Barcode → Scan barcode
+        Other fields → Do nothing
+        """
+
+        widget = self.focus_get()
+
+        # --------------------------------------------------
+        # Barcode field
+        # --------------------------------------------------
+        if widget is self.barcode_entry:
+            return self.scan_barcode(event)
+
+        # --------------------------------------------------
+        # Quantity field
+        # --------------------------------------------------
+        if widget is self.quantity_entry:
+            return self._keyboard_add_product(event)
+
+        # --------------------------------------------------
+        # Product ComboBox
+        # --------------------------------------------------
+        if widget is self.product_combo:
+            return self._keyboard_add_product(event)
+
+        # CTkComboBox internal entry
+        combo_entry = getattr(self.product_combo, "_entry", None)
+
+        if combo_entry is not None and widget is combo_entry:
+            return self._keyboard_add_product(event)
+
+        # --------------------------------------------------
+        # Anything else
+        # --------------------------------------------------
+        return
+
+    
     def _keyboard_increase(self, event=None):
         """
         + → Increase selected cart item.
@@ -596,6 +743,14 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         self.phone_entry.focus_set()
         self.phone_entry.select_range(0, "end")
+
+        return "break"
+
+    def _keyboard_focus_barcode(self, event=None):
+        """F3 → Focus barcode scanner field."""
+
+        self.barcode_entry.focus_set()
+        self.barcode_entry.select_range(0, "end")
 
         return "break"
     # ==========================================================
@@ -781,22 +936,10 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.customer_entry.grid(
             row=2, column=1, padx=20, pady=(5, 15), sticky="ew")
 
-        # Loyalty Points
-        self.points_label = ctk.CTkLabel(
-            customer_frame,
-            textvariable=self.points_var,
-            font=("Poppins", 12, "bold"),
-            text_color="#16A34A"
+        self.customer_entry.bind(
+            "<KeyRelease>",
+            lambda event: self.update_receipt_preview()
         )
-
-        self.points_label.grid(
-            row=3,
-            column=1,
-            padx=20,
-            pady=(0,15),
-            sticky="w"
-        )
-
         # Loyalty Points Display
         self.points_var = ctk.StringVar(value="⭐ Loyalty Points : 0")
 
@@ -823,13 +966,14 @@ class BillingPage(ctk.CTkScrollableFrame):
             customer_frame,
             values=["Cash", "UPI", "Card"],
             variable=self.payment_method_var,
-            height=38
+            height=38,
+            command=lambda value: self.update_receipt_preview()
         )
 
         self.payment_combo.grid(
             row=2, column=2, padx=20, pady=(5, 15), sticky="ew")
-
-        # ======================================================
+        
+       # ======================================================
         # PRODUCT SELECTION
         # ======================================================
 
@@ -841,24 +985,139 @@ class BillingPage(ctk.CTkScrollableFrame):
             border_color="#D1D5DB"
         )
 
-        product_frame.pack(fill="x", padx=30, pady=10)
+        product_frame.pack(
+            fill="x",
+            padx=30,
+            pady=10
+        )
 
-        product_frame.grid_columnconfigure((0, 1, 2), weight=1)
+        # Column layout
+        product_frame.grid_columnconfigure(0, weight=1)
+        product_frame.grid_columnconfigure(1, weight=2)
+        product_frame.grid_columnconfigure(2, weight=0)
 
+        # Section title
         ctk.CTkLabel(
             product_frame,
             text="Add Products",
             font=("Poppins", 18, "bold"),
             text_color="#065F46"
-        ).grid(row=0, column=0, columnspan=3,
-               sticky="w", padx=20, pady=(15, 15))
+        ).grid(
+            row=0,
+            column=0,
+            columnspan=3,
+            sticky="w",
+            padx=20,
+            pady=(15, 15)
+        )
 
+        # Variables
         self.product_var = ctk.StringVar()
         self.quantity_var = ctk.StringVar(value="1")
 
-        # Product Dropdown
-        ctk.CTkLabel(product_frame, text="Product").grid(
-            row=1, column=0, sticky="w", padx=20)
+        # ======================================================
+        # BARCODE
+        # ======================================================
+
+        ctk.CTkLabel(
+            product_frame,
+            text="🔎 Barcode Scanner",
+            font=("Poppins", 13, "bold"),
+            text_color="#065F46"
+        ).grid(
+            row=1,
+            column=0,
+            sticky="w",
+            padx=20,
+            pady=(0, 5)
+        )
+
+        self.barcode_entry = ctk.CTkEntry(
+            product_frame,
+            textvariable=self.barcode_var,
+            placeholder_text="Scan or enter barcode...",
+            height=42,
+            border_width=2,
+            border_color="#16A34A",
+            fg_color="#F0FDF4",
+            font=("Poppins", 13)
+        )
+
+        self.barcode_entry.grid(
+            row=1,
+            column=1,
+            padx=20,
+            pady=(0, 2),
+            sticky="ew"
+        )
+
+        self.barcode_entry.bind(
+            "<Return>",
+            self.scan_barcode
+        )
+        self.barcode_status = ctk.CTkLabel(
+            product_frame,
+            text="🟢 READY",
+            font=("Poppins", 10, "bold"),
+            text_color="#15803D",
+            fg_color="#DCFCE7",
+            corner_radius=12,
+            padx=10,
+            pady=4
+        )
+
+        self.barcode_status.grid(
+            row=1,
+            column=2,
+            padx=(0, 20),
+            sticky="e"
+        )
+
+        # Barcode keyboard hint
+        ctk.CTkLabel(
+            product_frame,
+            text="F3 → Focus Scanner   •   Enter → Scan",
+            font=("Poppins", 9),
+            text_color="#64748B"
+        ).grid(
+            row=2,
+            column=1,
+            sticky="w",
+            padx=20,
+            pady=(0, 8)
+        )
+
+        # ======================================================
+        # PRODUCT LABEL + QUANTITY LABEL
+        # ======================================================
+
+        ctk.CTkLabel(
+            product_frame,
+            text="Product",
+            font=("Poppins", 11, "bold")
+        ).grid(
+            row=3,
+            column=0,
+            sticky="w",
+            padx=20,
+            pady=(2, 5)
+        )
+
+        ctk.CTkLabel(
+            product_frame,
+            text="Quantity",
+            font=("Poppins", 11, "bold")
+        ).grid(
+            row=3,
+            column=1,
+            sticky="w",
+            padx=20,
+            pady=(2, 5)
+        )
+
+        # ======================================================
+        # PRODUCT DROPDOWN
+        # ======================================================
 
         self.product_combo = ctk.CTkComboBox(
             product_frame,
@@ -867,18 +1126,34 @@ class BillingPage(ctk.CTkScrollableFrame):
             height=38
         )
 
-
         self.product_combo.grid(
-            row=2, column=0, padx=20, pady=(5, 15), sticky="ew")
-
+            row=4,
+            column=0,
+            padx=20,
+            pady=(0, 15),
+            sticky="ew"
+        )
 
         self.product_combo.bind(
             "<Return>",
             self._keyboard_add_product
         )
-        # Quantity
-        ctk.CTkLabel(product_frame, text="Quantity").grid(
-            row=1, column=1, sticky="w", padx=20)
+
+        combo_entry = getattr(
+            self.product_combo,
+            "_entry",
+            None
+        )
+
+        if combo_entry is not None:
+            combo_entry.bind(
+                "<Return>",
+                self._keyboard_add_product
+            )
+
+        # ======================================================
+        # QUANTITY
+        # ======================================================
 
         self.quantity_entry = ctk.CTkEntry(
             product_frame,
@@ -887,14 +1162,22 @@ class BillingPage(ctk.CTkScrollableFrame):
         )
 
         self.quantity_entry.grid(
-            row=2, column=1, padx=20, pady=(5, 15), sticky="ew")
+            row=4,
+            column=1,
+            padx=20,
+            pady=(0, 15),
+            sticky="ew"
+        )
 
         self.quantity_entry.bind(
             "<Return>",
             self._keyboard_add_product
         )
-                
-        # Add Button
+
+        # ======================================================
+        # ADD BUTTON
+        # ======================================================
+
         self.add_item_button = ctk.CTkButton(
             product_frame,
             text="+ Add Item",
@@ -905,8 +1188,12 @@ class BillingPage(ctk.CTkScrollableFrame):
         )
 
         self.add_item_button.grid(
-            row=2, column=2, padx=20, pady=(5, 15), sticky="ew")
-
+            row=4,
+            column=2,
+            padx=20,
+            pady=(0, 15),
+            sticky="ew"
+        )
         # ======================================================
         # BILLING CART
         # ======================================================

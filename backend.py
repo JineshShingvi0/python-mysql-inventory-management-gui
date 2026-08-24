@@ -148,6 +148,38 @@ def get_product_by_id(product_id):
 
     return product
 
+
+# ==========================================================
+# GET PRODUCT BY BARCODE
+# ==========================================================
+
+def get_product_by_barcode(barcode):
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    cursor.execute("""
+        SELECT
+            product_id,
+            name,
+            category,
+            purchase_price,
+            selling_price,
+            stock,
+            minimum_stock,
+            barcode
+        FROM products
+        WHERE barcode = %s
+    """, (barcode,))
+
+    product = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return product
+
+
 # ==========================================================
 # DELETE PRODUCT
 # ==========================================================
