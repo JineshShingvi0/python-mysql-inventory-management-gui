@@ -1,4 +1,17 @@
 import customtkinter as ctk
+import os
+import barcode
+
+from reportlab.graphics.barcode import createBarcodeDrawing
+from reportlab.graphics import renderPDF
+from reportlab.graphics.shapes import Drawing
+
+from reportlab.pdfgen import canvas
+from reportlab.lib.pagesizes import A4
+from reportlab.lib.utils import ImageReader
+
+from barcode.writer import ImageWriter
+from PIL import Image, ImageDraw, ImageFont
 from tkinter import ttk, messagebox
 from backend import (
     get_all_products,
@@ -856,6 +869,8 @@ class ProductsPage(ctk.CTkScrollableFrame):
             f"Product: {product_name.title()}\n"
             f"Barcode: {barcode}"
         )
+
+    
     # ==========================================================
     # GENERATE BARCODE FOR SELECTED PRODUCT
     # ==========================================================
@@ -955,6 +970,607 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
     # ==========================================================
+    # GENERATE BARCODE LABEL
+    # ==========================================================
+
+    def generate_barcode_label(
+        self,
+        product_id,
+        product_name,
+        selling_price,
+        product_barcode
+        ):
+
+        # ------------------------------------------------------
+        # Validate barcode
+        # ------------------------------------------------------
+
+        if (
+            not product_barcode
+            or product_barcode == "—"
+        ):
+
+            messagebox.showwarning(
+                "No Barcode",
+                "This product does not have a barcode."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Create output directory
+        # ------------------------------------------------------
+
+        labels_dir = "barcode_labels"
+
+        os.makedirs(
+            labels_dir,
+            exist_ok=True
+        )
+
+        # ------------------------------------------------------
+        # Temporary barcode filename
+        # ------------------------------------------------------
+
+        barcode_base = os.path.join(
+            labels_dir,
+            f"barcode_{product_id}"
+        )
+
+        # ------------------------------------------------------
+        # Generate Code 128 barcode
+        # ------------------------------------------------------
+
+        code = barcode.get(
+            "code128",
+            str(product_barcode),
+            writer=ImageWriter()
+        )
+
+        barcode_file = code.save(
+            barcode_base
+        )
+
+        # python-barcode returns the actual PNG path
+        barcode_file = f"{barcode_base}.png"
+
+        # ------------------------------------------------------
+        # Open barcode image
+        # ------------------------------------------------------
+
+        barcode_image = Image.open(
+            barcode_file
+        ).convert("RGB")
+
+        # ------------------------------------------------------
+        # Label dimensions
+        # ------------------------------------------------------
+
+        label_width = 700
+        label_height = 430
+
+        label = Image.new(
+            "RGB",
+            (
+                label_width,
+                label_height
+            ),
+            "white"
+        )
+
+        draw = ImageDraw.Draw(
+            label
+        )
+
+        # ------------------------------------------------------
+        # Fonts
+        # ------------------------------------------------------
+
+        try:
+
+            title_font = ImageFont.truetype(
+                "DejaVuSans-Bold.ttf",
+                34
+            )
+
+            product_font = ImageFont.truetype(
+                "DejaVuSans-Bold.ttf",
+                30
+            )
+
+            price_font = ImageFont.truetype(
+                "DejaVuSans-Bold.ttf",
+                28
+            )
+
+            barcode_font = ImageFont.truetype(
+                "DejaVuSans.ttf",
+                22
+            )
+
+        except Exception:
+
+            title_font = ImageFont.load_default()
+            product_font = ImageFont.load_default()
+            price_font = ImageFont.load_default()
+            barcode_font = ImageFont.load_default()
+
+        # ------------------------------------------------------
+        # Border
+        # ------------------------------------------------------
+
+        draw.rounded_rectangle(
+            (5, 5, label_width - 5, label_height - 5),
+            radius=20,
+            outline="#065F46",
+            width=4
+        )
+
+        # ------------------------------------------------------
+        # Store Name
+        # ------------------------------------------------------
+
+        store_text = "SHINGVI SUPERMART"
+
+        store_box = draw.textbbox(
+            (0, 0),
+            store_text,
+            font=title_font
+        )
+
+        store_width = (
+            store_box[2] - store_box[0]
+        )
+
+        draw.text(
+            (
+                (label_width - store_width) / 2,
+                25
+            ),
+            store_text,
+            font=title_font,
+            fill="#065F46"
+        )
+
+        # ------------------------------------------------------
+        # Product Name
+        # ------------------------------------------------------
+
+        product_text = product_name.title()
+
+        product_box = draw.textbbox(
+            (0, 0),
+            product_text,
+            font=product_font
+        )
+
+        product_width = (
+            product_box[2] - product_box[0]
+        )
+
+        draw.text(
+            (
+                (label_width - product_width) / 2,
+                85
+            ),
+            product_text,
+            font=product_font,
+            fill="#111827"
+        )
+
+        # ------------------------------------------------------
+        # Price
+        # ------------------------------------------------------
+
+        price_text = f"₹{float(selling_price):,.2f}"
+
+        price_box = draw.textbbox(
+            (0, 0),
+            price_text,
+            font=price_font
+        )
+
+        price_width = (
+            price_box[2] - price_box[0]
+        )
+
+        draw.text(
+            (
+                (label_width - price_width) / 2,
+                135
+            ),
+            price_text,
+            font=price_font,
+            fill="#16A34A"
+        )
+
+        # ------------------------------------------------------
+        # Resize barcode
+        # ------------------------------------------------------
+
+        barcode_image.thumbnail(
+            (
+                600,
+                150
+            )
+        )
+
+        barcode_x = (
+            label_width - barcode_image.width
+        ) // 2
+
+        barcode_y = 190
+
+        label.paste(
+            barcode_image,
+            (
+                barcode_x,
+                barcode_y
+            )
+        )
+
+        # ------------------------------------------------------
+        # Barcode Number
+        # ------------------------------------------------------
+
+        barcode_text = str(
+            product_barcode
+        )
+
+        barcode_box = draw.textbbox(
+            (0, 0),
+            barcode_text,
+            font=barcode_font
+        )
+
+        barcode_width = (
+            barcode_box[2] - barcode_box[0]
+        )
+
+        draw.text(
+            (
+                (label_width - barcode_width) / 2,
+                355
+            ),
+            barcode_text,
+            font=barcode_font,
+            fill="#111827"
+        )
+
+        # ------------------------------------------------------
+        # Footer
+        # ------------------------------------------------------
+
+        footer_text = "Internal POS Barcode"
+
+        footer_box = draw.textbbox(
+            (0, 0),
+            footer_text,
+            font=barcode_font
+        )
+
+        footer_width = (
+            footer_box[2] - footer_box[0]
+        )
+
+        draw.text(
+            (
+                (label_width - footer_width) / 2,
+                390
+            ),
+            footer_text,
+            font=barcode_font,
+            fill="#64748B"
+        )
+
+        # ------------------------------------------------------
+        # Save final label
+        # ------------------------------------------------------
+
+        label_path = os.path.join(
+            labels_dir,
+            f"label_{product_id}.png"
+        )
+
+        label.save(
+            label_path,
+            "PNG"
+        )
+
+        return label_path
+
+
+    # ==========================================================
+    # GENERATE BARCODE LABEL PDF
+    # ==========================================================
+
+    def generate_barcode_label_pdf(
+        self,
+        product_id,
+        product_name,
+        selling_price,
+        product_barcode
+    ):
+
+        if (
+            not product_barcode
+            or product_barcode == "—"
+        ):
+
+            messagebox.showwarning(
+                "No Barcode",
+                "This product does not have a barcode."
+            )
+
+            return None
+
+        # ------------------------------------------------------
+        # Generate PNG label first
+        # ------------------------------------------------------
+
+        label_path = self.generate_barcode_label(
+            product_id,
+            product_name,
+            selling_price,
+            product_barcode
+        )
+
+        if not label_path:
+            return None
+
+        # ------------------------------------------------------
+        # PDF output directory
+        # ------------------------------------------------------
+
+        labels_dir = "barcode_labels"
+
+        os.makedirs(
+            labels_dir,
+            exist_ok=True
+        )
+
+        pdf_path = os.path.join(
+            labels_dir,
+            f"label_{product_id}.pdf"
+        )
+
+        # ------------------------------------------------------
+        # Create A4 PDF
+        # ------------------------------------------------------
+
+        pdf = canvas.Canvas(
+            pdf_path,
+            pagesize=A4
+        )
+
+        page_width, page_height = A4
+
+        # ------------------------------------------------------
+        # Label dimensions on PDF
+        # ------------------------------------------------------
+
+        label_width = 500
+        label_height = 310
+
+        x = (
+            page_width - label_width
+        ) / 2
+
+        y = (
+            page_height - label_height
+        ) / 2
+
+        # ------------------------------------------------------
+        # Draw label image
+        # ------------------------------------------------------
+
+        pdf.drawImage(
+            ImageReader(label_path),
+            x,
+            y,
+            width=label_width,
+            height=label_height,
+            preserveAspectRatio=True,
+            mask="auto"
+        )
+
+        pdf.showPage()
+        pdf.save()
+
+        return pdf_path
+    # ==========================================================
+    # PREVIEW BARCODE LABEL
+    # ==========================================================
+
+    def preview_barcode_label(
+        self,
+        product_id,
+        product_name,
+        selling_price,
+        barcode_value
+    ):
+
+        label_path = self.generate_barcode_label(
+            product_id,
+            product_name,
+            selling_price,
+            barcode_value
+        )
+
+        if not label_path:
+            return
+
+        preview = ctk.CTkToplevel(self)
+
+        preview.title(
+            "Barcode Label Preview"
+        )
+
+        preview.geometry(
+            "820x650"
+        )
+
+        preview.minsize(
+            820,
+            650
+        )
+
+        preview.grab_set()
+
+        preview.configure(
+            fg_color="#F9FAFB"
+        )
+
+        # ------------------------------------------------------
+        # Title
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            preview,
+            text="🖨 Barcode Label Preview",
+            font=("Poppins", 24, "bold"),
+            text_color="#065F46"
+        ).pack(
+            pady=(20, 5)
+        )
+
+        ctk.CTkLabel(
+            preview,
+            text=product_name.title(),
+            font=("Poppins", 14),
+            text_color="#64748B"
+        ).pack(
+            pady=(0, 15)
+        )
+
+        # ------------------------------------------------------
+        # Load image
+        # ------------------------------------------------------
+
+        preview_image = Image.open(
+            label_path
+        )
+
+        preview_image.thumbnail(
+            (
+                700,
+                430
+            )
+        )
+
+        ctk_image = ctk.CTkImage(
+            light_image=preview_image,
+            dark_image=preview_image,
+            size=(
+                preview_image.width,
+                preview_image.height
+            )
+        )
+
+        image_label = ctk.CTkLabel(
+            preview,
+            text="",
+            image=ctk_image
+        )
+
+        image_label.pack(
+            pady=10
+        )
+
+        # ------------------------------------------------------
+        # Buttons
+        # ------------------------------------------------------
+
+        button_frame = ctk.CTkFrame(
+            preview,
+            fg_color="transparent"
+        )
+
+        button_frame.pack(
+            fill="x",
+            padx=30,
+            pady=15
+        )
+
+
+        ctk.CTkButton(
+            button_frame,
+            text="📄 Save PDF",
+            height=42,
+            fg_color="#0F766E",
+            hover_color="#115E59",
+            command=lambda: self._save_label_pdf_from_preview(
+                product_id,
+                product_name,
+                selling_price,
+                barcode_value,
+                preview
+            )
+        ).pack(
+            side="left",
+            expand=True,
+            padx=5
+        )
+
+        ctk.CTkButton(
+            button_frame,
+            text="📁 Open Label Folder",
+            height=42,
+            fg_color="#2563EB",
+            hover_color="#1D4ED8",
+            command=lambda: os.system(
+                f'xdg-open "{os.path.dirname(label_path)}"'
+            )
+        ).pack(
+            side="left",
+            expand=True,
+            padx=5
+        )
+
+        ctk.CTkButton(
+            button_frame,
+            text="Close",
+            height=42,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            command=preview.destroy
+        ).pack(
+            side="left",
+            expand=True,
+            padx=5
+        )
+
+
+    # ==========================================================
+    # SAVE LABEL PDF FROM PREVIEW
+    # ==========================================================
+
+    def _save_label_pdf_from_preview(
+        self,
+        product_id,
+        product_name,
+        selling_price,
+        barcode_value,
+        preview
+    ):
+
+        pdf_path = self.generate_barcode_label_pdf(
+            product_id,
+            product_name,
+            selling_price,
+            barcode_value
+        )
+
+        if not pdf_path:
+            return
+
+        messagebox.showinfo(
+            "PDF Created",
+            f"Barcode label PDF created successfully!\n\n"
+            f"{pdf_path}",
+            parent=preview
+        )
+    # ==========================================================
     # BARCODE DETAILS POPUP
     # ==========================================================
 
@@ -995,10 +1611,11 @@ class ProductsPage(ctk.CTkScrollableFrame):
         popup = ctk.CTkToplevel(self)
 
         popup.title("Barcode Details")
-        popup.geometry("430x420")
+        popup.geometry("460x500")
+        popup.minsize(460, 500)
+        popup.maxsize(460, 500)
         popup.resizable(False, False)
         popup.grab_set()
-
         popup.configure(
             fg_color="white"
         )
@@ -1013,7 +1630,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
             font=("Poppins", 24, "bold"),
             text_color="#065F46"
         ).pack(
-            pady=(20, 5)
+            pady=(15, 5)
         )
 
         ctk.CTkLabel(
@@ -1022,7 +1639,23 @@ class ProductsPage(ctk.CTkScrollableFrame):
             font=("Poppins", 15, "bold"),
             text_color="#374151"
         ).pack(
-            pady=(0, 20)
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # SCROLLABLE CONTENT
+        # ======================================================
+
+        content_frame = ctk.CTkScrollableFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        content_frame.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 5)
         )
 
         # ------------------------------------------------------
@@ -1030,7 +1663,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
         # ------------------------------------------------------
 
         barcode_card = ctk.CTkFrame(
-            popup,
+            content_frame,
             fg_color="#F9FAFB",
             corner_radius=18,
             border_width=1,
@@ -1039,7 +1672,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         barcode_card.pack(
             fill="x",
-            padx=25,
+            padx=10,
             pady=5
         )
 
@@ -1070,44 +1703,73 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
         # ------------------------------------------------------
+        # Barcode Type
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            barcode_card,
+            text="Barcode Type",
+            font=("Poppins", 10, "bold"),
+            text_color="#64748B"
+        ).pack(
+            pady=(0, 2)
+        )
+
+        ctk.CTkLabel(
+            barcode_card,
+            text="Internal POS Barcode",
+            font=("Poppins", 12, "bold"),
+            text_color="#0F766E"
+        ).pack(
+            pady=(0, 15)
+        )
+
+        # ------------------------------------------------------
         # Status
         # ------------------------------------------------------
 
         if barcode_display == "No Barcode":
 
-            status_text = "⚠ This product does not have a barcode."
+            status_text = (
+                "⚠ This product does not have a barcode."
+            )
+
             status_color = "#B45309"
 
         else:
 
-            status_text = "🟢 Barcode assigned and scanner-ready."
+            status_text = (
+                "🟢 Barcode assigned and scanner-ready."
+            )
+
             status_color = "#15803D"
 
         ctk.CTkLabel(
-            popup,
+            content_frame,
             text=status_text,
             font=("Poppins", 11, "bold"),
             text_color=status_color
         ).pack(
-            pady=(12, 12)
+            pady=(10, 15)
         )
 
-        # ------------------------------------------------------
-        # BUTTON FRAME
-        # ------------------------------------------------------
+        # ======================================================
+        # FIXED BUTTON AREA
+        # ======================================================
 
         button_frame = ctk.CTkFrame(
             popup,
-            fg_color="transparent"
+            fg_color="white"
         )
 
         button_frame.pack(
             fill="x",
-            padx=25
+            padx=20,
+            pady=(0, 10)
         )
 
         # ------------------------------------------------------
-        # Copy
+        # Copy Barcode
         # ------------------------------------------------------
 
         def copy_barcode():
@@ -1126,7 +1788,9 @@ class ProductsPage(ctk.CTkScrollableFrame):
                 return
 
             self.clipboard_clear()
-            self.clipboard_append(current_barcode)
+            self.clipboard_append(
+                current_barcode
+            )
             self.update()
 
             messagebox.showinfo(
@@ -1138,17 +1802,57 @@ class ProductsPage(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             button_frame,
             text="📋 Copy Barcode",
-            height=40,
+            height=38,
             fg_color="#0EA5E9",
             hover_color="#0284C7",
             command=copy_barcode
         ).pack(
             fill="x",
-            pady=5
+            pady=3
         )
 
+
         # ------------------------------------------------------
-        # Generate
+        # Generate PNG
+        # ------------------------------------------------------
+
+        def generate_png():
+
+            if (
+                not current_barcode
+                or current_barcode == "—"
+            ):
+
+                messagebox.showwarning(
+                    "No Barcode",
+                    "Generate or assign a barcode first.",
+                    parent=popup
+                )
+
+                return
+
+            popup.destroy()
+
+            self.preview_barcode_png(
+                product_id,
+                product_name,
+                current_barcode
+            )
+
+
+        ctk.CTkButton(
+            button_frame,
+            text="🖼 Generate PNG",
+            height=38,
+            fg_color="#0F766E",
+            hover_color="#115E59",
+            command=generate_png
+        ).pack(
+            fill="x",
+            pady=3
+        )
+        # ------------------------------------------------------
+        # Generate Barcode
         # ------------------------------------------------------
 
         def generate_barcode():
@@ -1192,13 +1896,13 @@ class ProductsPage(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             button_frame,
             text="🏷 Generate Barcode",
-            height=40,
+            height=38,
             fg_color="#7C3AED",
             hover_color="#6D28D9",
             command=generate_barcode
         ).pack(
             fill="x",
-            pady=5
+            pady=3
         )
 
         # ------------------------------------------------------
@@ -1208,13 +1912,13 @@ class ProductsPage(ctk.CTkScrollableFrame):
         ctk.CTkButton(
             button_frame,
             text="Close",
-            height=40,
+            height=38,
             fg_color="#6B7280",
             hover_color="#4B5563",
             command=popup.destroy
         ).pack(
             fill="x",
-            pady=5
+            pady=3
         )
         
     # ==========================================================
@@ -1815,3 +2519,904 @@ class ProductsPage(ctk.CTkScrollableFrame):
                     barcode or "—"
                 )
             )
+
+    # ==========================================================
+    # LABEL GENERATOR POPUP
+    # ==========================================================
+
+    def open_label_generator(
+        self,
+        product_id,
+        product_name,
+        selling_price,
+        barcode_value
+    ):
+
+        if (
+            not barcode_value
+            or barcode_value == "—"
+        ):
+
+            messagebox.showwarning(
+                "No Barcode",
+                "Generate or assign a barcode first."
+            )
+
+            return
+
+        popup = ctk.CTkToplevel(self)
+
+        popup.title(
+            "Barcode Label Generator"
+        )
+
+        popup.geometry(
+            "460x560"
+        )
+
+        popup.minsize(
+            460,
+            560
+        )
+
+        popup.maxsize(
+            460,
+            560
+        )
+
+        popup.resizable(
+            False,
+            False
+        )
+
+        popup.grab_set()
+
+        popup.configure(
+            fg_color="white"
+        )
+
+        # ======================================================
+        # HEADER
+        # ======================================================
+
+        ctk.CTkLabel(
+            popup,
+            text="🖨 Barcode Label Generator",
+            font=("Poppins", 22, "bold"),
+            text_color="#065F46"
+        ).pack(
+            pady=(15, 5)
+        )
+
+        ctk.CTkLabel(
+            popup,
+            text=product_name.title(),
+            font=("Poppins", 14, "bold"),
+            text_color="#374151"
+        ).pack(
+            pady=(0, 8)
+        )
+
+        # ======================================================
+        # SCROLLABLE CONTENT
+        # ======================================================
+
+        content_frame = ctk.CTkScrollableFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        content_frame.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 5)
+        )
+
+        # ======================================================
+        # PRODUCT INFORMATION CARD
+        # ======================================================
+
+        info_frame = ctk.CTkFrame(
+            content_frame,
+            fg_color="#F9FAFB",
+            corner_radius=16,
+            border_width=1,
+            border_color="#E5E7EB"
+        )
+
+        info_frame.pack(
+            fill="x",
+            padx=10,
+            pady=5
+        )
+
+        ctk.CTkLabel(
+            info_frame,
+            text=f"Barcode: {barcode_value}",
+            font=("Poppins", 12, "bold"),
+            text_color="#111827"
+        ).pack(
+            pady=(14, 5)
+        )
+
+        ctk.CTkLabel(
+            info_frame,
+            text=(
+                f"Selling Price: "
+                f"₹{float(selling_price):,.2f}"
+            ),
+            font=("Poppins", 11),
+            text_color="#64748B"
+        ).pack(
+            pady=(0, 5)
+        )
+
+        ctk.CTkLabel(
+            info_frame,
+            text="Barcode Type: Internal POS Barcode",
+            font=("Poppins", 10, "bold"),
+            text_color="#0F766E"
+        ).pack(
+            pady=(0, 14)
+        )
+
+        # ======================================================
+        # NUMBER OF LABELS
+        # ======================================================
+
+        ctk.CTkLabel(
+            content_frame,
+            text="Number of Labels",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(15, 5)
+        )
+
+        label_count_var = ctk.StringVar(
+            value="1"
+        )
+
+        label_count_entry = ctk.CTkEntry(
+            content_frame,
+            textvariable=label_count_var,
+            width=140,
+            height=40,
+            justify="center",
+            font=("Poppins", 14, "bold")
+        )
+
+        label_count_entry.pack()
+
+        label_count_entry.select_range(
+            0,
+            "end"
+        )
+
+        # ======================================================
+        # OPTIONAL NOTE
+        # ======================================================
+
+        ctk.CTkLabel(
+            content_frame,
+            text=(
+                "Tip: You can generate up to "
+                "500 labels at once."
+            ),
+            font=("Poppins", 10),
+            text_color="#64748B"
+        ).pack(
+            pady=(10, 20)
+        )
+
+        # ======================================================
+        # STATUS
+        # ======================================================
+
+        status_label = ctk.CTkLabel(
+            popup,
+            text="",
+            font=("Poppins", 10, "bold")
+        )
+
+        status_label.pack(
+            pady=(0, 5)
+        )
+
+        # ======================================================
+        # FIXED BUTTON AREA
+        # ======================================================
+
+        button_frame = ctk.CTkFrame(
+            popup,
+            fg_color="white"
+        )
+
+        button_frame.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # GENERATE MULTIPLE LABELS
+        # ======================================================
+
+        def generate_multiple_labels():
+
+            try:
+
+                count = int(
+                    label_count_var.get().strip()
+                )
+
+            except ValueError:
+
+                status_label.configure(
+                    text="Enter a valid whole number.",
+                    text_color="red"
+                )
+
+                return
+
+            if count <= 0:
+
+                status_label.configure(
+                    text="Number of labels must be at least 1.",
+                    text_color="red"
+                )
+
+                return
+
+            if count > 500:
+
+                status_label.configure(
+                    text="Maximum 500 labels at once.",
+                    text_color="red"
+                )
+
+                return
+
+            try:
+
+                pdf_path = (
+                    self.generate_multiple_barcode_labels(
+                        product_id,
+                        product_name,
+                        selling_price,
+                        barcode_value,
+                        count
+                    )
+                )
+
+            except Exception as error:
+
+                status_label.configure(
+                    text=f"Generation failed: {error}",
+                    text_color="red"
+                )
+
+                return
+
+            if not pdf_path:
+
+                status_label.configure(
+                    text="Unable to create the PDF.",
+                    text_color="red"
+                )
+
+                return
+
+            status_label.configure(
+                text=f"✅ {count} label(s) created successfully.",
+                text_color="#15803D"
+            )
+
+            messagebox.showinfo(
+                "Labels Generated",
+                f"{count} barcode label(s) generated successfully!\n\n"
+                f"{pdf_path}",
+                parent=popup
+            )
+
+
+        # ======================================================
+        # OPEN FOLDER
+        # ======================================================
+
+        def open_label_folder():
+
+            labels_dir = os.path.abspath(
+                "barcode_labels"
+            )
+
+            os.makedirs(
+                labels_dir,
+                exist_ok=True
+            )
+
+            try:
+
+                os.system(
+                    f'xdg-open "{labels_dir}"'
+                )
+
+            except Exception as error:
+
+                messagebox.showerror(
+                    "Unable to Open Folder",
+                    str(error),
+                    parent=popup
+                )
+
+        # ======================================================
+        # GENERATE PDF BUTTON
+        # ======================================================
+
+        ctk.CTkButton(
+            button_frame,
+            text="📄 Generate PDF",
+            height=40,
+            fg_color="#0F766E",
+            hover_color="#115E59",
+            font=("Poppins", 13, "bold"),
+            command=generate_multiple_labels
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        # ======================================================
+        # OPEN FOLDER BUTTON
+        # ======================================================
+
+        ctk.CTkButton(
+            button_frame,
+            text="📁 Open Label Folder",
+            height=40,
+            fg_color="#2563EB",
+            hover_color="#1D4ED8",
+            font=("Poppins", 13, "bold"),
+            command=open_label_folder
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        # ======================================================
+        # CANCEL
+        # ======================================================
+
+        ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            height=40,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            font=("Poppins", 13, "bold"),
+            command=popup.destroy
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        label_count_entry.focus_set()
+
+
+        # ==========================================================
+        # GENERATE BARCODE PNG
+        # ==========================================================
+
+    def generate_barcode_png(
+            self,
+            product_id,
+            product_name,
+            barcode_value
+        ):
+
+            if (
+                not barcode_value
+                or barcode_value == "—"
+            ):
+                messagebox.showwarning(
+                    "No Barcode",
+                    "This product does not have a barcode."
+                )
+                return None
+
+            # ------------------------------------------------------
+            # Output directory
+            # ------------------------------------------------------
+
+            output_dir = "barcode_images"
+
+            os.makedirs(
+                output_dir,
+                exist_ok=True
+            )
+
+            output_base = os.path.join(
+                output_dir,
+                f"barcode_{product_id}"
+            )
+
+            # ------------------------------------------------------
+            # Generate real Code 128 PNG
+            # ------------------------------------------------------
+
+            code = barcode.get(
+                "code128",
+                str(barcode_value),
+                writer=ImageWriter()
+            )
+
+            code.save(
+                output_base,
+                options={
+                    "write_text": True,
+                    "font_size": 20,
+                    "text_distance": 16,
+                    "module_width": 0.40,
+                    "module_height": 30,
+                    "quiet_zone": 10,
+                    "dpi": 300
+                }
+            )
+
+            png_path = f"{output_base}.png"
+
+            return png_path
+
+
+        # ==========================================================
+        # PREVIEW BARCODE PNG
+        # ==========================================================
+
+    def preview_barcode_png(
+            self,
+            product_id,
+            product_name,
+            barcode_value
+        ):
+
+            png_path = self.generate_barcode_png(
+                product_id,
+                product_name,
+                barcode_value
+            )
+
+            if not png_path:
+                return
+
+            preview = ctk.CTkToplevel(self)
+
+            preview.title(
+                "Barcode Image"
+            )
+
+            preview.geometry(
+                "620x430"
+            )
+
+            preview.minsize(
+                620,
+                430
+            )
+
+            preview.maxsize(
+                620,
+                430
+            )
+
+            preview.resizable(
+                False,
+                False
+            )
+
+            preview.grab_set()
+
+            preview.configure(
+                fg_color="#F9FAFB"
+            )
+
+            # ------------------------------------------------------
+            # Header
+            # ------------------------------------------------------
+
+            ctk.CTkLabel(
+                preview,
+                text="🖼 Barcode Image",
+                font=("Poppins", 22, "bold"),
+                text_color="#065F46"
+            ).pack(
+                pady=(20, 5)
+            )
+
+            ctk.CTkLabel(
+                preview,
+                text=product_name.title(),
+                font=("Poppins", 14, "bold"),
+                text_color="#374151"
+            ).pack(
+                pady=(0, 10)
+            )
+
+            # ------------------------------------------------------
+            # Load generated PNG
+            # ------------------------------------------------------
+
+            image = Image.open(
+                png_path
+            ).convert("RGB")
+
+            # Keep the saved PNG unchanged.
+            # Only resize the DISPLAY copy.
+            preview_image = image.copy()
+
+            preview_image.thumbnail(
+                (520, 220),
+                Image.Resampling.LANCZOS
+            )
+
+            ctk_image = ctk.CTkImage(
+                light_image=preview_image,
+                dark_image=preview_image,
+                size=(
+                    preview_image.width,
+                    preview_image.height
+                )
+            )
+
+            image_label = ctk.CTkLabel(
+                preview,
+                text="",
+                image=ctk_image
+            )
+
+            image_label.pack(
+                pady=8
+            )
+
+            # ------------------------------------------------------
+            # Saved path
+            # ------------------------------------------------------
+
+            ctk.CTkLabel(
+                preview,
+                text=f"Saved: {png_path}",
+                font=("Poppins", 9),
+                text_color="#64748B"
+            ).pack(
+                pady=(2, 8)
+            )
+
+            # ------------------------------------------------------
+            # Buttons
+            # ------------------------------------------------------
+
+            button_frame = ctk.CTkFrame(
+                preview,
+                fg_color="transparent"
+            )
+
+            button_frame.pack(
+                fill="x",
+                padx=25,
+                pady=8
+            )
+
+            def open_folder():
+
+                folder = os.path.abspath(
+                    "barcode_images"
+                )
+
+                os.makedirs(
+                    folder,
+                    exist_ok=True
+                )
+
+                os.system(
+                    f'xdg-open "{folder}"'
+                )
+
+            ctk.CTkButton(
+                button_frame,
+                text="📁 Open Barcode Folder",
+                height=40,
+                fg_color="#2563EB",
+                hover_color="#1D4ED8",
+                command=open_folder
+            ).pack(
+                side="left",
+                expand=True,
+                padx=5
+            )
+
+            ctk.CTkButton(
+                button_frame,
+                text="Close",
+                height=40,
+                fg_color="#6B7280",
+                hover_color="#4B5563",
+                command=preview.destroy
+            ).pack(
+                side="left",
+                expand=True,
+                padx=5
+            )
+    # ==========================================================
+    # GENERATE MULTIPLE BARCODE LABELS
+    # ==========================================================
+
+    def generate_multiple_barcode_labels(
+        self,
+        product_id,
+        product_name,
+        selling_price,
+        barcode_value,
+        label_count
+    ):
+
+        from reportlab.pdfgen import canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.graphics.barcode import code128
+        from reportlab.graphics import renderPDF
+
+        if not barcode_value or barcode_value == "—":
+            return None
+
+        # ------------------------------------------------------
+        # Output directory
+        # ------------------------------------------------------
+
+        labels_dir = "barcode_labels"
+
+        os.makedirs(
+            labels_dir,
+            exist_ok=True
+        )
+
+        # ------------------------------------------------------
+        # PDF path
+        # ------------------------------------------------------
+
+        pdf_path = os.path.join(
+            labels_dir,
+            f"labels_{product_id}_{label_count}.pdf"
+        )
+
+        pdf = canvas.Canvas(
+            pdf_path,
+            pagesize=A4
+        )
+
+        page_width, page_height = A4
+
+        # ======================================================
+        # LABEL GRID
+        # ======================================================
+
+        margin_x = 25
+        margin_y = 28
+
+        label_width = 270
+        label_height = 175
+
+        gap_x = 12
+        gap_y = 12
+
+        columns = 2
+        rows = 4
+
+        labels_per_page = columns * rows
+
+        # ======================================================
+        # BARCODE SETTINGS
+        # ======================================================
+
+        barcode_width = 220
+        barcode_height = 48
+
+        # ======================================================
+        # CREATE LABELS
+        # ======================================================
+
+        for index in range(label_count):
+
+            position = index % labels_per_page
+
+            if position == 0 and index != 0:
+                pdf.showPage()
+
+            row = position // columns
+            column = position % columns
+
+            x = (
+                margin_x
+                + column * (
+                    label_width + gap_x
+                )
+            )
+
+            y = (
+                page_height
+                - margin_y
+                - (row + 1) * label_height
+                - row * gap_y
+            )
+
+            # ==================================================
+            # BORDER
+            # ==================================================
+
+            pdf.setLineWidth(1.2)
+
+            pdf.setStrokeColorRGB(
+                0.025,
+                0.373,
+                0.275
+            )
+
+            pdf.roundRect(
+                x,
+                y,
+                label_width,
+                label_height,
+                8,
+                stroke=1,
+                fill=0
+            )
+
+            # ==================================================
+            # STORE NAME
+            # ==================================================
+
+            pdf.setFillColorRGB(
+                0.025,
+                0.373,
+                0.275
+            )
+
+            pdf.setFont(
+                "Helvetica-Bold",
+                11
+            )
+
+            pdf.drawCentredString(
+                x + label_width / 2,
+                y + label_height - 20,
+                "SHINGVI SUPERMART"
+            )
+
+            # ==================================================
+            # PRODUCT NAME
+            # ==================================================
+
+            pdf.setFillColorRGB(
+                0.067,
+                0.094,
+                0.153
+            )
+
+            pdf.setFont(
+                "Helvetica-Bold",
+                10
+            )
+
+            product_display = product_name.title()
+
+            if len(product_display) > 28:
+
+                product_display = (
+                    product_display[:25] + "..."
+                )
+
+            pdf.drawCentredString(
+                x + label_width / 2,
+                y + label_height - 38,
+                product_display
+            )
+
+            # ==================================================
+            # PRICE
+            # ==================================================
+
+            pdf.setFillColorRGB(
+                0.086,
+                0.639,
+                0.290
+            )
+
+            pdf.setFont(
+                "Helvetica-Bold",
+                10
+            )
+
+            pdf.drawCentredString(
+                x + label_width / 2,
+                y + label_height - 55,
+                f"₹{float(selling_price):,.2f}"
+            )
+
+            # ==================================================
+            # REAL VECTOR CODE 128 BARCODE
+            # ==================================================
+
+            barcode_value = str(barcode_value)
+
+            barcode_drawing = createBarcodeDrawing(
+                "Code128",
+                value=barcode_value,
+                barHeight=48,
+                barWidth=0.8,
+                humanReadable=False
+            )
+
+            # Center the vector barcode inside the label
+            barcode_x = (
+                x
+                + (label_width - barcode_drawing.width) / 2
+            )
+
+            barcode_y = y + 48
+
+            renderPDF.draw(
+                barcode_drawing,
+                pdf,
+                barcode_x,
+                barcode_y
+            )
+            # ==================================================
+            # BARCODE NUMBER
+            # ==================================================
+
+            pdf.setFillColorRGB(
+                0.067,
+                0.094,
+                0.153
+            )
+
+            pdf.setFont(
+                "Helvetica",
+                8
+            )
+
+            pdf.drawCentredString(
+                x + label_width / 2,
+                y + 27,
+                barcode_value
+            )
+
+            # ==================================================
+            # BARCODE TYPE
+            # ==================================================
+
+            pdf.setFillColorRGB(
+                0.39,
+                0.45,
+                0.50
+            )
+
+            pdf.setFont(
+                "Helvetica",
+                6.5
+            )
+
+            pdf.drawCentredString(
+                x + label_width / 2,
+                y + 12,
+                "Internal POS Barcode"
+            )
+
+        # ------------------------------------------------------
+        # Save
+        # ------------------------------------------------------
+
+        pdf.showPage()
+        pdf.save()
+
+        return pdf_path
