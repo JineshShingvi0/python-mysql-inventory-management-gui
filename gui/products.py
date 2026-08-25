@@ -129,6 +129,28 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
         # ----------------------------------------------------------
+        # Copy Barcode
+        # ----------------------------------------------------------
+
+        self.copy_barcode_button = ctk.CTkButton(
+            top_row,
+            text="📋 Copy Barcode",
+            width=135,
+            height=38,
+            fg_color="#0EA5E9",
+            hover_color="#0284C7",
+            font=("Poppins", 12, "bold"),
+            command=self.copy_selected_barcode
+        )
+
+        self.copy_barcode_button.grid(
+            row=0,
+            column=2,
+            padx=(0, 10)
+        )
+
+
+        # ----------------------------------------------------------
         # Generate Barcode
         # ----------------------------------------------------------
 
@@ -145,9 +167,29 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         self.generate_barcode_button.grid(
             row=0,
-            column=2
+            column=3
         )
 
+        # ----------------------------------------------------------
+        # Barcode Details
+        # ----------------------------------------------------------
+
+        self.barcode_details_button = ctk.CTkButton(
+            top_row,
+            text="🔎 Barcode Details",
+            width=145,
+            height=38,
+            fg_color="#0F766E",
+            hover_color="#115E59",
+            font=("Poppins", 12, "bold"),
+            command=self.open_barcode_details
+        )
+
+        self.barcode_details_button.grid(
+            row=0,
+            column=4,
+            padx=(10, 0)
+        )
         # ==========================================================
         # ACTION ROW
         # ==========================================================
@@ -735,6 +777,86 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
     # ==========================================================
+    # COPY SELECTED PRODUCT BARCODE
+    # ==========================================================
+
+    def copy_selected_barcode(self):
+
+        selected = self.table.selection()
+
+        # ------------------------------------------------------
+        # No product selected
+        # ------------------------------------------------------
+
+        if not selected:
+
+            messagebox.showwarning(
+                "No Product Selected",
+                "Please select a product first."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Get selected row
+        # ------------------------------------------------------
+
+        values = self.table.item(
+            selected[0],
+            "values"
+        )
+
+        product_name = str(
+            values[1]
+        )
+
+        barcode = str(
+            values[5]
+        ).strip()
+
+        # ------------------------------------------------------
+        # No barcode
+        # ------------------------------------------------------
+
+        if not barcode or barcode == "—":
+
+            messagebox.showwarning(
+                "No Barcode",
+                f"{product_name.title()} does not have a barcode."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Copy to clipboard
+        # ------------------------------------------------------
+
+        try:
+
+            self.clipboard_clear()
+            self.clipboard_append(barcode)
+            self.update()
+
+        except Exception as error:
+
+            messagebox.showerror(
+                "Copy Failed",
+                f"Unable to copy barcode.\n\n{error}"
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Success
+        # ------------------------------------------------------
+
+        messagebox.showinfo(
+            "Barcode Copied",
+            f"Barcode copied successfully!\n\n"
+            f"Product: {product_name.title()}\n"
+            f"Barcode: {barcode}"
+        )
+    # ==========================================================
     # GENERATE BARCODE FOR SELECTED PRODUCT
     # ==========================================================
 
@@ -832,7 +954,269 @@ class ProductsPage(ctk.CTkScrollableFrame):
             f"Barcode: {result}"
         )
 
+    # ==========================================================
+    # BARCODE DETAILS POPUP
+    # ==========================================================
 
+    def open_barcode_details(self):
+
+        selected = self.table.selection()
+
+        # ------------------------------------------------------
+        # No selection
+        # ------------------------------------------------------
+
+        if not selected:
+
+            messagebox.showwarning(
+                "No Product Selected",
+                "Please select a product first."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Get selected product
+        # ------------------------------------------------------
+
+        values = self.table.item(
+            selected[0],
+            "values"
+        )
+
+        product_id = int(values[0])
+        product_name = str(values[1])
+        current_barcode = str(values[5]).strip()
+
+        # ------------------------------------------------------
+        # Create popup
+        # ------------------------------------------------------
+
+        popup = ctk.CTkToplevel(self)
+
+        popup.title("Barcode Details")
+        popup.geometry("430x420")
+        popup.resizable(False, False)
+        popup.grab_set()
+
+        popup.configure(
+            fg_color="white"
+        )
+
+        # ------------------------------------------------------
+        # Header
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            popup,
+            text="🏷 Barcode Details",
+            font=("Poppins", 24, "bold"),
+            text_color="#065F46"
+        ).pack(
+            pady=(20, 5)
+        )
+
+        ctk.CTkLabel(
+            popup,
+            text=product_name.title(),
+            font=("Poppins", 15, "bold"),
+            text_color="#374151"
+        ).pack(
+            pady=(0, 20)
+        )
+
+        # ------------------------------------------------------
+        # Barcode Card
+        # ------------------------------------------------------
+
+        barcode_card = ctk.CTkFrame(
+            popup,
+            fg_color="#F9FAFB",
+            corner_radius=18,
+            border_width=1,
+            border_color="#E5E7EB"
+        )
+
+        barcode_card.pack(
+            fill="x",
+            padx=25,
+            pady=5
+        )
+
+        ctk.CTkLabel(
+            barcode_card,
+            text="Barcode",
+            font=("Poppins", 12, "bold"),
+            text_color="#64748B"
+        ).pack(
+            pady=(15, 5)
+        )
+
+        barcode_display = (
+            current_barcode
+            if current_barcode and current_barcode != "—"
+            else "No Barcode"
+        )
+
+        barcode_label = ctk.CTkLabel(
+            barcode_card,
+            text=barcode_display,
+            font=("Poppins", 22, "bold"),
+            text_color="#111827"
+        )
+
+        barcode_label.pack(
+            pady=(0, 15)
+        )
+
+        # ------------------------------------------------------
+        # Status
+        # ------------------------------------------------------
+
+        if barcode_display == "No Barcode":
+
+            status_text = "⚠ This product does not have a barcode."
+            status_color = "#B45309"
+
+        else:
+
+            status_text = "🟢 Barcode assigned and scanner-ready."
+            status_color = "#15803D"
+
+        ctk.CTkLabel(
+            popup,
+            text=status_text,
+            font=("Poppins", 11, "bold"),
+            text_color=status_color
+        ).pack(
+            pady=(12, 12)
+        )
+
+        # ------------------------------------------------------
+        # BUTTON FRAME
+        # ------------------------------------------------------
+
+        button_frame = ctk.CTkFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        button_frame.pack(
+            fill="x",
+            padx=25
+        )
+
+        # ------------------------------------------------------
+        # Copy
+        # ------------------------------------------------------
+
+        def copy_barcode():
+
+            if (
+                not current_barcode
+                or current_barcode == "—"
+            ):
+
+                messagebox.showwarning(
+                    "No Barcode",
+                    "There is no barcode to copy.",
+                    parent=popup
+                )
+
+                return
+
+            self.clipboard_clear()
+            self.clipboard_append(current_barcode)
+            self.update()
+
+            messagebox.showinfo(
+                "Copied",
+                f"Barcode copied:\n\n{current_barcode}",
+                parent=popup
+            )
+
+        ctk.CTkButton(
+            button_frame,
+            text="📋 Copy Barcode",
+            height=40,
+            fg_color="#0EA5E9",
+            hover_color="#0284C7",
+            command=copy_barcode
+        ).pack(
+            fill="x",
+            pady=5
+        )
+
+        # ------------------------------------------------------
+        # Generate
+        # ------------------------------------------------------
+
+        def generate_barcode():
+
+            if (
+                current_barcode
+                and current_barcode != "—"
+            ):
+
+                messagebox.showinfo(
+                    "Barcode Already Exists",
+                    "This product already has a barcode.",
+                    parent=popup
+                )
+
+                return
+
+            success, result = generate_product_barcode(
+                product_id
+            )
+
+            if not success:
+
+                messagebox.showerror(
+                    "Generation Failed",
+                    str(result),
+                    parent=popup
+                )
+
+                return
+
+            popup.destroy()
+
+            self.load_products()
+
+            messagebox.showinfo(
+                "Barcode Generated",
+                f"Barcode generated successfully:\n\n{result}"
+            )
+
+        ctk.CTkButton(
+            button_frame,
+            text="🏷 Generate Barcode",
+            height=40,
+            fg_color="#7C3AED",
+            hover_color="#6D28D9",
+            command=generate_barcode
+        ).pack(
+            fill="x",
+            pady=5
+        )
+
+        # ------------------------------------------------------
+        # Close
+        # ------------------------------------------------------
+
+        ctk.CTkButton(
+            button_frame,
+            text="Close",
+            height=40,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            command=popup.destroy
+        ).pack(
+            fill="x",
+            pady=5
+        )
+        
     # ==========================================================
     # UPDATE PRODUCT POPUP
     # ==========================================================
@@ -1377,37 +1761,47 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         keyword = self.search_entry.get().strip().lower()
 
-        # Empty search → show all products
+        # --------------------------------------------------
+        # Empty search → restore all products
+        # --------------------------------------------------
+
         if keyword == "":
             self.load_products()
             return
 
+        # --------------------------------------------------
+        # Search backend
+        # --------------------------------------------------
+
         products = search_products(keyword)
 
-        # Clear table
+        # --------------------------------------------------
+        # Clear current table
+        # --------------------------------------------------
+
         for row in self.table.get_children():
             self.table.delete(row)
+
+        # --------------------------------------------------
+        # Update result count
+        # --------------------------------------------------
 
         self.count_label.configure(
             text=f"{len(products)} Products Found"
         )
 
-        for product in products:
+        # --------------------------------------------------
+        # Insert search results
+        # --------------------------------------------------
 
-            product_id = product[0]
-            name = product[1]
-            category = product[2]
-            selling_price = product[3]
-            stock = product[4]
-
-            # Get barcode from the full product record
-            full_product = get_product_by_id(product_id)
-
-            barcode = (
-                full_product[1]
-                if full_product
-                else None
-            )
+        for (
+            product_id,
+            name,
+            category,
+            selling_price,
+            stock,
+            barcode
+        ) in products:
 
             self.table.insert(
                 "",

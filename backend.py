@@ -399,7 +399,7 @@ def generate_product_barcode(product_id):
         cursor.close()
         connection.close()
 
-        
+
 # ==========================================================
 # GET PRODUCTS WITH BARCODE
 # ==========================================================
@@ -469,11 +469,13 @@ def search_products(keyword):
         name,
         category,
         selling_price,
-        stock
+        stock,
+        barcode
     FROM products
     WHERE
         name LIKE %s
         OR category LIKE %s
+        OR barcode LIKE %s
     ORDER BY name ASC
     """
 
@@ -481,7 +483,11 @@ def search_products(keyword):
 
     cursor.execute(
         query,
-        (search_keyword, search_keyword)
+        (
+            search_keyword,
+            search_keyword,
+            search_keyword
+        )
     )
 
     products = cursor.fetchall()
