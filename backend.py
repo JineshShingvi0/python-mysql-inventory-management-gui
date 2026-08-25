@@ -1650,3 +1650,308 @@ def get_inventory_health():
         "out_of_stock": out_of_stock,
         "score": score
     }
+
+
+# ==========================================================
+# GET SALE ITEMS FOR RETURN
+# ==========================================================
+
+def get_sale_items_for_return(sale_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            si.sale_item_id,
+            si.product_id,
+            p.name,
+            si.quantity,
+            si.selling_price,
+            si.subtotal,
+            COALESCE(
+                (
+                    SELECT SUM(r.quantity)
+                    FROM returns r
+                    WHERE r.sale_item_id = si.sale_item_id
+                ),
+                0
+            ) AS returned_quantity
+        FROM sale_items si
+        JOIN products p
+            ON si.product_id = p.product_id
+        WHERE si.sale_id = %s
+        ORDER BY si.sale_item_id
+    """, (sale_id,))
+
+    items = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return items
+
+# ==========================================================
+# GET SALE DETAILS FOR RETURN
+# ==========================================================
+
+def get_sale_for_return(sale_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            sale_id,
+            customer_id,
+            total_amount,
+            gst_amount,
+            discount_amount,
+            payment_method,
+            sale_date
+        FROM sales
+        WHERE sale_id = %s
+    """, (sale_id,))
+
+    sale = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return sale
+
+
+# ==========================================================
+# GET RETURN HISTORY
+# ==========================================================
+
+def get_return_history(limit=50):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            r.return_id,
+            r.sale_id,
+            COALESCE(c.name, 'Walk-in Customer'),
+            p.name,
+            r.quantity,
+            r.refund_amount,
+            r.return_date
+        FROM returns r
+        JOIN sales s
+            ON r.sale_id = s.sale_id
+        LEFT JOIN customers c
+            ON s.customer_id = c.customer_id
+        JOIN products p
+            ON r.product_id = p.product_id
+        ORDER BY r.return_date DESC
+        LIMIT %s
+    """, (limit,))
+
+    returns = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return returns
+
+
+# ==========================================================
+# PROCESS PRODUCT RETURN
+# ==========================================================
+
+def process_return(
+    sale_id,
+    sale_item_id,
+    product_id,
+    quantity
+):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        # --------------------------------------------------
+        # Validate quantity
+        # --------------------------------------------------
+
+        if quantity <= 0:
+            raise ValueError(
+                "Return quantity must be greater than zero."
+            )
+
+        # --------------------------------------------------
+        # Get original sale item
+        # --------------------------------------------------
+
+        cursor.execute("""
+            SELECT
+                quantity,
+                selling_price
+            FROM sale_items
+            WHERE
+                sale_item_id = %s
+                AND sale_id = %s
+                AND product_id = %s
+            FOR UPDATE
+        """, (
+            sale_item_id,
+            sale_id,
+            product_id
+        ))
+
+        sale_item = cursor.fetchone()
+
+        if not sale_item:
+            raise ValueError(
+                "Sale item not found."
+            )
+
+        sold_quantity = int(
+            sale_item[0]
+        )
+
+        selling_price = float(
+            sale_item[1]
+        )
+
+        # --------------------------------------------------
+        # Calculate already returned quantity
+        # --------------------------------------------------
+
+        cursor.execute("""
+            SELECT COALESCE(
+                SUM(quantity),
+                0
+            )
+            FROM returns
+            WHERE sale_item_id = %s
+        """, (sale_item_id,))
+
+        already_returned = int(
+            cursor.fetchone()[0]
+        )
+
+        # --------------------------------------------------
+        # Calculate remaining returnable quantity
+        # --------------------------------------------------
+
+        remaining_quantity = (
+            sold_quantity
+            - already_returned
+        )
+
+        if quantity > remaining_quantity:
+
+            raise ValueError(
+                f"Only {remaining_quantity} "
+                f"unit(s) can still be returned."
+            )
+
+        # --------------------------------------------------
+        # Calculate refund
+        # --------------------------------------------------
+
+        refund_amount = (
+            selling_price * quantity
+        )
+
+        # --------------------------------------------------
+        # Record return
+        # --------------------------------------------------
+
+        cursor.execute("""
+            INSERT INTO returns (
+                sale_id,
+                sale_item_id,
+                product_id,
+                quantity,
+                refund_amount
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s,
+                %s
+            )
+        """, (
+            sale_id,
+            sale_item_id,
+            product_id,
+            quantity,
+            refund_amount
+        ))
+
+        # --------------------------------------------------
+        # Return stock to inventory
+        # --------------------------------------------------
+
+        cursor.execute("""
+            UPDATE products
+            SET stock = stock + %s
+            WHERE product_id = %s
+        """, (
+            quantity,
+            product_id
+        ))
+
+        # --------------------------------------------------
+        # Get updated stock
+        # --------------------------------------------------
+
+        cursor.execute("""
+            SELECT stock
+            FROM products
+            WHERE product_id = %s
+        """, (product_id,))
+
+        stock_after = cursor.fetchone()[0]
+
+        # --------------------------------------------------
+        # Record RETURN stock movement
+        # --------------------------------------------------
+
+        cursor.execute("""
+            INSERT INTO stock_movements (
+                product_id,
+                movement_type,
+                quantity,
+                stock_after
+            )
+            VALUES (
+                %s,
+                %s,
+                %s,
+                %s
+            )
+        """, (
+            product_id,
+            "RETURN",
+            quantity,
+            stock_after
+        ))
+
+        connection.commit()
+
+        return {
+            "success": True,
+            "refund_amount": refund_amount,
+            "returned_quantity": quantity,
+            "remaining_returnable": (
+                remaining_quantity - quantity
+            )
+        }
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()

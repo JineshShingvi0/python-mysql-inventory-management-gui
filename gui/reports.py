@@ -1,5 +1,5 @@
 import customtkinter as ctk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 from datetime import datetime
 
 from backend import (
@@ -14,7 +14,11 @@ from backend import (
     get_stock_movements,
     get_sales_history,
     get_payment_analytics,
-    get_inventory_health
+    get_inventory_health,
+    get_sale_for_return,
+    get_sale_items_for_return,
+    process_return,
+    get_return_history
 )
 
 
@@ -509,7 +513,6 @@ class ReportsPage(ctk.CTkScrollableFrame):
             padx=(0,20),
             pady=(0,15)
         )
-
         separator = ctk.CTkFrame(
             self,
             fg_color="#E5E7EB",
@@ -600,6 +603,35 @@ class ReportsPage(ctk.CTkScrollableFrame):
             pady=(0,20)
         )
 
+# ==========================================================
+        # SALES RETURN / REFUND
+        # ==========================================================
+
+        return_button_frame = ctk.CTkFrame(
+            self,
+            fg_color="transparent"
+        )
+
+        return_button_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 10)
+        )
+
+        self.return_button = ctk.CTkButton(
+            return_button_frame,
+            text="↩ Return / Refund Selected Invoice",
+            width=260,
+            height=40,
+            fg_color="#DC2626",
+            hover_color="#B91C1C",
+            font=("Poppins", 13, "bold"),
+            command=self.open_return_popup
+        )
+
+        self.return_button.pack(
+            side="right"
+        )
         separator = ctk.CTkFrame(
             self,
             fg_color="#E5E7EB",
@@ -608,6 +640,129 @@ class ReportsPage(ctk.CTkScrollableFrame):
         )
         separator.pack(fill="x", padx=30, pady=(8,18))
 
+        # ==========================================================
+        # RETURN HISTORY
+        # ==========================================================
+
+        return_history_frame = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            corner_radius=10
+        )
+
+        return_history_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
+
+        ctk.CTkLabel(
+            return_history_frame,
+            text="↩ Return History",
+            font=("Poppins", 18, "bold"),
+            text_color="#DC2626"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(15, 10)
+        )
+
+        return_table_frame = ctk.CTkFrame(
+            return_history_frame,
+            fg_color="transparent"
+        )
+
+        return_table_frame.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=(0, 15)
+        )
+
+        return_columns = (
+            "Return ID",
+            "Invoice",
+            "Customer",
+            "Product",
+            "Qty",
+            "Refund",
+            "Date"
+        )
+
+        self.return_table = ttk.Treeview(
+            return_table_frame,
+            columns=return_columns,
+            show="headings",
+            height=6
+        )
+
+        for col in return_columns:
+
+            self.return_table.heading(
+                col,
+                text=col
+            )
+
+        self.return_table.column(
+            "Return ID",
+            width=80,
+            anchor="center"
+        )
+
+        self.return_table.column(
+            "Invoice",
+            width=90,
+            anchor="center"
+        )
+
+        self.return_table.column(
+            "Customer",
+            width=140
+        )
+
+        self.return_table.column(
+            "Product",
+            width=180
+        )
+
+        self.return_table.column(
+            "Qty",
+            width=70,
+            anchor="center"
+        )
+
+        self.return_table.column(
+            "Refund",
+            width=110,
+            anchor="e"
+        )
+
+        self.return_table.column(
+            "Date",
+            width=150,
+            anchor="center"
+        )
+
+        return_scroll = ttk.Scrollbar(
+            return_table_frame,
+            orient="vertical",
+            command=self.return_table.yview
+        )
+
+        self.return_table.configure(
+            yscrollcommand=return_scroll.set
+        )
+
+        self.return_table.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        return_scroll.pack(
+            side="right",
+            fill="y"
+        )
 
         # =====================================================
         # LOW STOCK TABLE
@@ -934,6 +1089,713 @@ class ReportsPage(ctk.CTkScrollableFrame):
             )
 
             legend_x += 90
+
+    # ==========================================================
+    # RETURN / REFUND POPUP
+    # ==========================================================
+
+    def open_return_popup(self):
+
+        selected = self.sales_table.selection()
+
+        if not selected:
+
+            messagebox.showwarning(
+                "No Invoice Selected",
+                "Please select an invoice from Sales History first."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Get selected invoice
+        # ------------------------------------------------------
+
+        values = self.sales_table.item(
+            selected[0],
+            "values"
+        )
+
+        invoice_text = str(
+            values[0]
+        )
+
+        if not invoice_text.startswith("INV"):
+
+            messagebox.showerror(
+                "Invalid Invoice",
+                "Unable to determine the selected invoice."
+            )
+
+            return
+
+        try:
+
+            sale_id = int(
+                invoice_text.replace(
+                    "INV",
+                    ""
+                )
+            )
+
+        except ValueError:
+
+            messagebox.showerror(
+                "Invalid Invoice",
+                "Unable to determine the sale ID."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Load sale
+        # ------------------------------------------------------
+
+        sale = get_sale_for_return(
+            sale_id
+        )
+
+        if not sale:
+
+            messagebox.showerror(
+                "Invoice Not Found",
+                "The selected invoice could not be found."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Load sale items
+        # ------------------------------------------------------
+
+        items = get_sale_items_for_return(
+            sale_id
+        )
+
+        if not items:
+
+            messagebox.showinfo(
+                "No Items",
+                "No sale items were found for this invoice."
+            )
+
+            return
+
+        # ======================================================
+        # CREATE POPUP
+        # ======================================================
+
+        popup = ctk.CTkToplevel(
+            self
+        )
+
+        popup.title(
+            "Sales Return / Refund"
+        )
+
+        popup.geometry(
+            "760x650"
+        )
+
+        popup.minsize(
+            760,
+            650
+        )
+
+        popup.maxsize(
+            760,
+            650
+        )
+
+        popup.resizable(
+            False,
+            False
+        )
+
+        popup.grab_set()
+
+        popup.configure(
+            fg_color="#F9FAFB"
+        )
+
+        # ======================================================
+        # HEADER
+        # ======================================================
+
+        ctk.CTkLabel(
+            popup,
+            text="↩ Sales Return / Refund",
+            font=("Poppins", 24, "bold"),
+            text_color="#DC2626"
+        ).pack(
+            pady=(15, 3)
+        )
+
+        ctk.CTkLabel(
+            popup,
+            text=f"Invoice: INV{sale_id:04d}",
+            font=("Poppins", 14, "bold"),
+            text_color="#374151"
+        ).pack(
+            pady=(0, 2)
+        )
+
+        ctk.CTkLabel(
+            popup,
+            text=f"Customer: {values[1]}",
+            font=("Poppins", 11),
+            text_color="#64748B"
+        ).pack(
+            pady=(0, 8)
+        )
+
+        # ======================================================
+        # SCROLLABLE CONTENT
+        # ======================================================
+
+        content_frame = ctk.CTkScrollableFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        content_frame.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 5)
+        )
+
+        # ======================================================
+        # SALE ITEMS CARD
+        # ======================================================
+
+        table_card = ctk.CTkFrame(
+            content_frame,
+            fg_color="white",
+            corner_radius=16,
+            border_width=1,
+            border_color="#E5E7EB"
+        )
+
+        table_card.pack(
+            fill="x",
+            padx=10,
+            pady=5
+        )
+
+        ctk.CTkLabel(
+            table_card,
+            text="Invoice Products",
+            font=("Poppins", 13, "bold"),
+            text_color="#065F46"
+        ).pack(
+            anchor="w",
+            padx=15,
+            pady=(12, 5)
+        )
+
+        table_body = ctk.CTkFrame(
+            table_card,
+            fg_color="transparent"
+        )
+
+        table_body.pack(
+            fill="both",
+            padx=10,
+            pady=(0, 10)
+        )
+
+        columns = (
+            "Product",
+            "Sold",
+            "Returned",
+            "Available",
+            "Price"
+        )
+
+        item_table = ttk.Treeview(
+            table_body,
+            columns=columns,
+            show="headings",
+            height=7
+        )
+
+        for col in columns:
+
+            item_table.heading(
+                col,
+                text=col
+            )
+
+        item_table.column(
+            "Product",
+            width=250
+        )
+
+        item_table.column(
+            "Sold",
+            width=80,
+            anchor="center"
+        )
+
+        item_table.column(
+            "Returned",
+            width=90,
+            anchor="center"
+        )
+
+        item_table.column(
+            "Available",
+            width=90,
+            anchor="center"
+        )
+
+        item_table.column(
+            "Price",
+            width=110,
+            anchor="e"
+        )
+
+        table_scroll = ttk.Scrollbar(
+            table_body,
+            orient="vertical",
+            command=item_table.yview
+        )
+
+        item_table.configure(
+            yscrollcommand=table_scroll.set
+        )
+
+        item_table.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        table_scroll.pack(
+            side="right",
+            fill="y"
+        )
+
+        # ======================================================
+        # KEEP ITEM DATA
+        # ======================================================
+
+        item_lookup = {}
+
+        for item in items:
+
+            (
+                sale_item_id,
+                product_id,
+                product_name,
+                sold_quantity,
+                selling_price,
+                subtotal,
+                returned_quantity
+            ) = item
+
+            sold_quantity = int(
+                sold_quantity
+            )
+
+            returned_quantity = int(
+                returned_quantity or 0
+            )
+
+            available_quantity = (
+                sold_quantity
+                - returned_quantity
+            )
+
+            row_id = item_table.insert(
+                "",
+                "end",
+                values=(
+                    product_name.title(),
+                    sold_quantity,
+                    returned_quantity,
+                    available_quantity,
+                    f"₹{float(selling_price):,.2f}"
+                )
+            )
+
+            item_lookup[row_id] = {
+                "sale_item_id": sale_item_id,
+                "product_id": product_id,
+                "product_name": product_name,
+                "sold_quantity": sold_quantity,
+                "returned_quantity": returned_quantity,
+                "available_quantity": available_quantity,
+                "selling_price": float(
+                    selling_price
+                )
+            }
+
+        # ======================================================
+        # RETURN CONTROL CARD
+        # ======================================================
+
+        control_card = ctk.CTkFrame(
+            content_frame,
+            fg_color="white",
+            corner_radius=16,
+            border_width=1,
+            border_color="#E5E7EB"
+        )
+
+        control_card.pack(
+            fill="x",
+            padx=10,
+            pady=(10, 15)
+        )
+
+        ctk.CTkLabel(
+            control_card,
+            text="Return Details",
+            font=("Poppins", 13, "bold"),
+            text_color="#065F46"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(15, 8)
+        )
+
+        # ------------------------------------------------------
+        # Return quantity
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            control_card,
+            text="Return Quantity",
+            font=("Poppins", 12, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20
+        )
+
+        quantity_var = ctk.StringVar(
+            value="1"
+        )
+
+        quantity_entry = ctk.CTkEntry(
+            control_card,
+            textvariable=quantity_var,
+            width=130,
+            height=38,
+            justify="center",
+            font=("Poppins", 13, "bold")
+        )
+
+        quantity_entry.pack(
+            anchor="w",
+            padx=20,
+            pady=(5, 10)
+        )
+
+        # ------------------------------------------------------
+        # Refund amount
+        # ------------------------------------------------------
+
+        refund_var = ctk.StringVar(
+            value="Refund Amount: ₹0.00"
+        )
+
+        ctk.CTkLabel(
+            control_card,
+            textvariable=refund_var,
+            font=("Poppins", 15, "bold"),
+            text_color="#DC2626"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(0, 5)
+        )
+
+        status_var = ctk.StringVar(
+            value="Select a product."
+        )
+
+        ctk.CTkLabel(
+            control_card,
+            textvariable=status_var,
+            font=("Poppins", 10, "bold"),
+            text_color="#B45309"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(0, 15)
+        )
+
+        # ======================================================
+        # REFUND PREVIEW
+        # ======================================================
+
+        def update_refund_preview(
+            event=None
+        ):
+
+            selected_item = item_table.selection()
+
+            if not selected_item:
+
+                refund_var.set(
+                    "Refund Amount: ₹0.00"
+                )
+
+                status_var.set(
+                    "Select a product."
+                )
+
+                return
+
+            item = item_lookup[
+                selected_item[0]
+            ]
+
+            try:
+
+                quantity = int(
+                    quantity_var.get().strip()
+                )
+
+            except ValueError:
+
+                refund_var.set(
+                    "Refund Amount: ₹0.00"
+                )
+
+                status_var.set(
+                    "Enter a valid quantity."
+                )
+
+                return
+
+            if quantity <= 0:
+
+                refund_var.set(
+                    "Refund Amount: ₹0.00"
+                )
+
+                status_var.set(
+                    "Quantity must be greater than zero."
+                )
+
+                return
+
+            if quantity > item[
+                "available_quantity"
+            ]:
+
+                refund_var.set(
+                    "Refund Amount: ₹0.00"
+                )
+
+                status_var.set(
+                    f"Maximum returnable quantity: "
+                    f"{item['available_quantity']}"
+                )
+
+                return
+
+            refund_amount = (
+                quantity
+                * item["selling_price"]
+            )
+
+            refund_var.set(
+                f"Refund Amount: ₹{refund_amount:,.2f}"
+            )
+
+            status_var.set(
+                f"{item['product_name'].title()} • "
+                f"{item['available_quantity']} unit(s) available"
+            )
+
+        item_table.bind(
+            "<<TreeviewSelect>>",
+            update_refund_preview
+        )
+
+        quantity_entry.bind(
+            "<KeyRelease>",
+            update_refund_preview
+        )
+
+        # ======================================================
+        # FIXED BOTTOM BUTTON AREA
+        # ======================================================
+
+        bottom_frame = ctk.CTkFrame(
+            popup,
+            fg_color="white"
+        )
+
+        bottom_frame.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # PROCESS RETURN
+        # ======================================================
+
+        def process_selected_return():
+
+            selected_item = item_table.selection()
+
+            if not selected_item:
+
+                messagebox.showwarning(
+                    "No Product Selected",
+                    "Select a product to return.",
+                    parent=popup
+                )
+
+                return
+
+            item = item_lookup[
+                selected_item[0]
+            ]
+
+            try:
+
+                quantity = int(
+                    quantity_var.get().strip()
+                )
+
+            except ValueError:
+
+                messagebox.showerror(
+                    "Invalid Quantity",
+                    "Enter a valid whole number.",
+                    parent=popup
+                )
+
+                return
+
+            if quantity <= 0:
+
+                messagebox.showerror(
+                    "Invalid Quantity",
+                    "Return quantity must be greater than zero.",
+                    parent=popup
+                )
+
+                return
+
+            if quantity > item[
+                "available_quantity"
+            ]:
+
+                messagebox.showerror(
+                    "Return Limit",
+                    f"Only {item['available_quantity']} "
+                    f"unit(s) can still be returned.",
+                    parent=popup
+                )
+
+                return
+
+            refund_amount = (
+                quantity
+                * item["selling_price"]
+            )
+
+            confirm = messagebox.askyesno(
+                "Confirm Return",
+                f"Product: {item['product_name'].title()}\n"
+                f"Quantity: {quantity}\n"
+                f"Refund: ₹{refund_amount:,.2f}\n\n"
+                f"Process this return?",
+                parent=popup
+            )
+
+            if not confirm:
+                return
+
+            try:
+
+                result = process_return(
+                    sale_id,
+                    item["sale_item_id"],
+                    item["product_id"],
+                    quantity
+                )
+
+            except Exception as error:
+
+                messagebox.showerror(
+                    "Return Failed",
+                    str(error),
+                    parent=popup
+                )
+
+                return
+
+            if not result.get(
+                "success"
+            ):
+
+                messagebox.showerror(
+                    "Return Failed",
+                    "The return could not be completed.",
+                    parent=popup
+                )
+
+                return
+
+            refund_amount = result[
+                "refund_amount"
+            ]
+
+            popup.destroy()
+
+            self.load_reports()
+
+            messagebox.showinfo(
+                "Return Successful",
+                f"Return completed successfully.\n\n"
+                f"Product: {item['product_name'].title()}\n"
+                f"Quantity: {quantity}\n"
+                f"Refund: ₹{refund_amount:,.2f}"
+            )
+
+        # ======================================================
+        # BUTTONS
+        # ======================================================
+
+        ctk.CTkButton(
+            bottom_frame,
+            text="↩ Process Return",
+            height=42,
+            fg_color="#DC2626",
+            hover_color="#B91C1C",
+            font=("Poppins", 13, "bold"),
+            command=process_selected_return
+        ).pack(
+            side="left",
+            expand=True,
+            padx=5
+        )
+
+        ctk.CTkButton(
+            bottom_frame,
+            text="Cancel",
+            height=42,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            font=("Poppins", 13, "bold"),
+            command=popup.destroy
+        ).pack(
+            side="left",
+            expand=True,
+            padx=5
+        )
+
+        quantity_entry.focus_set()
     # ==========================================================
     # LOAD REPORTS
     # ==========================================================
@@ -1123,6 +1985,57 @@ class ReportsPage(ctk.CTkScrollableFrame):
                     payment,
                     f"₹{float(total):.2f}",
                     sale_date.strftime("%d-%b-%Y")
+                )
+            )
+
+        # =====================================================
+        # RETURN HISTORY
+        # =====================================================
+
+        for row in self.return_table.get_children():
+            self.return_table.delete(row)
+
+        returns = get_return_history()
+
+        for (
+            return_id,
+            sale_id,
+            customer,
+            product,
+            quantity,
+            refund_amount,
+            return_date
+        ) in returns:
+
+            customer_name = (
+                customer.title()
+                if customer
+                else "Walk-in Customer"
+            )
+
+            product_name = (
+                product.title()
+                if product
+                else "Unknown Product"
+            )
+
+            invoice = (
+                f"INV{sale_id:04d}"
+            )
+
+            self.return_table.insert(
+                "",
+                "end",
+                values=(
+                    return_id,
+                    invoice,
+                    customer_name,
+                    product_name,
+                    quantity,
+                    f"₹{float(refund_amount):,.2f}",
+                    return_date.strftime(
+                        "%d-%b-%Y %H:%M"
+                    )
                 )
             )
     # ==========================================================
