@@ -328,6 +328,78 @@ def update_product_barcode(product_id, barcode):
 
     return True
 
+
+# ==========================================================
+# GENERATE UNIQUE INTERNAL BARCODE
+# ==========================================================
+
+def generate_product_barcode(product_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        # --------------------------------------------------
+        # Create a 12-digit internal barcode
+        # --------------------------------------------------
+
+        barcode = f"290{int(product_id):09d}"
+
+        # --------------------------------------------------
+        # Check whether it already exists
+        # --------------------------------------------------
+
+        cursor.execute(
+            """
+            SELECT product_id
+            FROM products
+            WHERE barcode = %s
+            """,
+            (barcode,)
+        )
+
+        existing = cursor.fetchone()
+
+        if existing and existing[0] != product_id:
+
+            cursor.close()
+            connection.close()
+
+            return False, (
+                "Generated barcode already belongs "
+                "to another product."
+            )
+
+        # --------------------------------------------------
+        # Save barcode
+        # --------------------------------------------------
+
+        cursor.execute(
+            """
+            UPDATE products
+            SET barcode = %s
+            WHERE product_id = %s
+            """,
+            (barcode, product_id)
+        )
+
+        connection.commit()
+
+        return True, barcode
+
+    except Exception as error:
+
+        connection.rollback()
+
+        return False, str(error)
+
+    finally:
+
+        cursor.close()
+        connection.close()
+
+        
 # ==========================================================
 # GET PRODUCTS WITH BARCODE
 # ==========================================================

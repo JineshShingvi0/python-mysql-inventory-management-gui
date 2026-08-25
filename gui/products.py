@@ -11,13 +11,18 @@ from backend import (
     search_products,
     get_products_with_barcodes,
     update_product_barcode,
+    generate_product_barcode
 )
 
 
-class ProductsPage(ctk.CTkFrame):
+class ProductsPage(ctk.CTkScrollableFrame):
 
     def __init__(self, parent):
-        super().__init__(parent, fg_color="#F9FAFB")
+        super().__init__(
+            parent, 
+            fg_color="#F9FAFB",
+            corner_radius=0
+            )
 
         self.build_ui()
         self.load_products()
@@ -43,78 +48,216 @@ class ProductsPage(ctk.CTkFrame):
         )
         self.count_label.pack(anchor="w", padx=30)
 
-        # ---------------- Toolbar ----------------
-        toolbar = ctk.CTkFrame(self, fg_color="transparent")
-        toolbar.pack(fill="x", padx=30, pady=15)
+        # ==========================================================
+        # PRODUCTS TOOLBAR
+        # ==========================================================
+
+        toolbar = ctk.CTkFrame(
+            self,
+            fg_color="transparent"
+        )
+
+        toolbar.pack(
+            fill="x",
+            padx=30,
+            pady=(12, 8)
+        )
+
+        # ----------------------------------------------------------
+        # Toolbar layout
+        # ----------------------------------------------------------
+
+        toolbar.grid_columnconfigure(0, weight=1)
+        toolbar.grid_columnconfigure(1, weight=0)
+
+        # ==========================================================
+        # TOP ROW
+        # ==========================================================
+
+        top_row = ctk.CTkFrame(
+            toolbar,
+            fg_color="transparent"
+        )
+
+        top_row.grid(
+            row=0,
+            column=0,
+            columnspan=2,
+            sticky="ew"
+        )
+
+        top_row.grid_columnconfigure(0, weight=1)
+        top_row.grid_columnconfigure(1, weight=0)
+
+        # ----------------------------------------------------------
+        # Search
+        # ----------------------------------------------------------
 
         self.search_entry = ctk.CTkEntry(
-            toolbar,
+            top_row,
             placeholder_text="Search product by name or category...",
-            width=300,
             height=38
-        )       
+        )
 
-        self.search_entry.pack(side="left")
+        self.search_entry.grid(
+            row=0,
+            column=0,
+            sticky="ew"
+        )
 
-        # Search while typing
         self.search_entry.bind(
             "<KeyRelease>",
             self.search_products_event
-            )
+        )
+
+        # ----------------------------------------------------------
+        # Refresh
+        # ----------------------------------------------------------
+
         self.refresh_button = ctk.CTkButton(
-            toolbar,
+            top_row,
             text="Refresh",
             width=100,
+            height=38,
             command=self.load_products
         )
-        self.refresh_button.pack(side="left", padx=10)
 
-        right_buttons = ctk.CTkFrame(toolbar, fg_color="transparent")
-        right_buttons.pack(side="right")
+        self.refresh_button.grid(
+            row=0,
+            column=1,
+            padx=(10, 10)
+        )
 
-        # Delete Button
+        # ----------------------------------------------------------
+        # Generate Barcode
+        # ----------------------------------------------------------
+
+        self.generate_barcode_button = ctk.CTkButton(
+            top_row,
+            text="🏷 Generate Barcode",
+            width=155,
+            height=38,
+            fg_color="#7C3AED",
+            hover_color="#6D28D9",
+            font=("Poppins", 12, "bold"),
+            command=self.generate_selected_barcode
+        )
+
+        self.generate_barcode_button.grid(
+            row=0,
+            column=2
+        )
+
+        # ==========================================================
+        # ACTION ROW
+        # ==========================================================
+
+        action_row = ctk.CTkFrame(
+            toolbar,
+            fg_color="transparent"
+        )
+
+        action_row.grid(
+            row=1,
+            column=0,
+            columnspan=2,
+            sticky="e",
+            pady=(8, 0)
+        )
+
+        # ----------------------------------------------------------
+        # Delete
+        # ----------------------------------------------------------
+
         self.delete_button = ctk.CTkButton(
-            right_buttons,
+            action_row,
             text="🗑 Delete",
             width=110,
+            height=38,
             fg_color="#DC2626",
             hover_color="#B91C1C",
             command=self.open_delete_product_popup
-            )
-        self.delete_button.pack(side="left", padx=5)
+        )
+
+        self.delete_button.grid(
+            row=0,
+            column=0,
+            padx=5
+        )
+
+        # ----------------------------------------------------------
+        # Update
+        # ----------------------------------------------------------
+
         self.update_button = ctk.CTkButton(
-            right_buttons,
+            action_row,
             text="✏ Update",
             width=120,
+            height=38,
             fg_color="#2563EB",
             hover_color="#1D4ED8",
             command=self.open_update_product_popup
         )
-        self.update_button.pack(side="left", padx=5)
+
+        self.update_button.grid(
+            row=0,
+            column=1,
+            padx=5
+        )
+
+        # ----------------------------------------------------------
+        # Add Stock
+        # ----------------------------------------------------------
 
         self.stock_button = ctk.CTkButton(
-            right_buttons,
+            action_row,
             text="📦 Add Stock",
             width=130,
+            height=38,
             fg_color="#EA580C",
             hover_color="#C2410C",
             command=self.open_add_stock_popup
         )
-        self.stock_button.pack(side="left", padx=5)
+
+        self.stock_button.grid(
+            row=0,
+            column=2,
+            padx=5
+        )
+
+        # ----------------------------------------------------------
+        # Add Product
+        # ----------------------------------------------------------
 
         self.add_button = ctk.CTkButton(
-            right_buttons,
+            action_row,
             text="+ Add Product",
             width=140,
+            height=38,
             fg_color="#16A34A",
             hover_color="#15803D",
             command=self.open_add_product_popup
         )
-        self.add_button.pack(side="left", padx=5)
 
+        self.add_button.grid(
+            row=0,
+            column=3,
+            padx=(5, 0)
+        )
         # ---------------- Table ----------------
-        table_frame = ctk.CTkFrame(self)
-        table_frame.pack(fill="both", expand=True, padx=30, pady=(0, 20))
+        table_frame = ctk.CTkFrame(
+            self,
+            height=460,
+            corner_radius=0
+        )
+
+        table_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(8, 20)
+        )
+
+        table_frame.pack_propagate(False)
 
         columns = (
                 "ID",
@@ -170,6 +313,34 @@ class ProductsPage(ctk.CTkFrame):
 
         self.table.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
+
+        # ==========================================================
+        # TABLE MOUSE-WHEEL SCROLL
+        # ==========================================================
+
+        self.table.bind(
+            "<MouseWheel>",
+            lambda event: self.table.yview_scroll(
+                int(-1 * (event.delta / 120)),
+                "units"
+            )
+        )
+
+        self.table.bind(
+            "<Button-4>",
+            lambda event: self.table.yview_scroll(
+                -1,
+                "units"
+            )
+        )
+
+        self.table.bind(
+            "<Button-5>",
+            lambda event: self.table.yview_scroll(
+                1,
+                "units"
+            )
+        )
 
     # ==========================================================
     # LOAD PRODUCTS
@@ -562,6 +733,105 @@ class ProductsPage(ctk.CTkFrame):
         ).pack(
             pady=(0, 2)
         )
+
+    # ==========================================================
+    # GENERATE BARCODE FOR SELECTED PRODUCT
+    # ==========================================================
+
+    def generate_selected_barcode(self):
+
+        selected = self.table.selection()
+
+        # ------------------------------------------------------
+        # No product selected
+        # ------------------------------------------------------
+
+        if not selected:
+
+            messagebox.showwarning(
+                "No Product Selected",
+                "Please select a product first."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Get selected product
+        # ------------------------------------------------------
+
+        values = self.table.item(
+            selected[0],
+            "values"
+        )
+
+        product_id = int(values[0])
+
+        product_name = str(
+            values[1]
+        )
+
+        current_barcode = str(
+            values[5]
+        ).strip()
+
+        # ------------------------------------------------------
+        # Prevent overwriting existing barcode
+        # ------------------------------------------------------
+
+        if current_barcode and current_barcode != "—":
+
+            messagebox.showinfo(
+                "Barcode Already Exists",
+                f"{product_name.title()} already has a barcode:\n\n"
+                f"{current_barcode}\n\n"
+                "Use Update Product if you want to replace it."
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Confirmation
+        # ------------------------------------------------------
+
+        confirm = messagebox.askyesno(
+            "Generate Barcode",
+            f"Generate a new internal barcode for:\n\n"
+            f"{product_name.title()}?"
+        )
+
+        if not confirm:
+            return
+
+        # ------------------------------------------------------
+        # Generate barcode
+        # ------------------------------------------------------
+
+        success, result = generate_product_barcode(
+            product_id
+        )
+
+        if not success:
+
+            messagebox.showerror(
+                "Barcode Generation Failed",
+                str(result)
+            )
+
+            return
+
+        # ------------------------------------------------------
+        # Refresh table
+        # ------------------------------------------------------
+
+        self.load_products()
+
+        messagebox.showinfo(
+            "Barcode Generated",
+            f"Barcode generated successfully!\n\n"
+            f"Product: {product_name.title()}\n"
+            f"Barcode: {result}"
+        )
+
 
     # ==========================================================
     # UPDATE PRODUCT POPUP
