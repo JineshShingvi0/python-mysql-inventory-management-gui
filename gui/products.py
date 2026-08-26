@@ -2311,7 +2311,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
             pady=(0, 2)
         )
     # ==========================================================
-    # ADD STOCK POPUP (DAY 9)
+    # ADD STOCK / PURCHASE POPUP
     # ==========================================================
 
     def open_add_stock_popup(self):
@@ -2319,81 +2319,378 @@ class ProductsPage(ctk.CTkScrollableFrame):
         selected = self.table.selection()
 
         if not selected:
+
             messagebox.showwarning(
                 "No Product Selected",
                 "Please select a product first."
             )
+
             return
 
-        values = self.table.item(selected[0], "values")
+        values = self.table.item(
+            selected[0],
+            "values"
+        )
 
-        product_id = int(values[0])
-        product_name = values[1]
-        current_stock = int(values[4])
+        product_id = int(
+            values[0]
+        )
 
-        popup = ctk.CTkToplevel(self)
-        popup.title("Add Stock")
-        popup.geometry("420x330")
-        popup.resizable(False, False)
+        product_name = str(
+            values[1]
+        )
+
+        current_stock = int(
+            values[4]
+        )
+
+        popup = ctk.CTkToplevel(
+            self
+        )
+
+        popup.title(
+            "Stock In / Purchase"
+        )
+
+        popup.geometry(
+            "470x600"
+        )
+
+        popup.minsize(
+            470,
+            600
+        )
+
+        popup.maxsize(
+            470,
+            600
+        )
+
+        popup.resizable(
+            False,
+            False
+        )
+
         popup.grab_set()
-        popup.configure(fg_color="white")
+
+        popup.configure(
+            fg_color="white"
+        )
+
+        # ======================================================
+        # HEADER
+        # ======================================================
 
         ctk.CTkLabel(
             popup,
-            text="📦 Add Stock",
-            font=("Poppins", 22, "bold"),
+            text="📦 Stock In / Purchase",
+            font=("Poppins", 23, "bold"),
             text_color="#EA580C"
-        ).pack(pady=(20, 10))
+        ).pack(
+            pady=(20, 5)
+        )
 
         ctk.CTkLabel(
             popup,
-            text=f"Product: {product_name.title()}",
-            font=("Poppins", 14, "bold")
-        ).pack()
+            text=product_name.title(),
+            font=("Poppins", 15, "bold"),
+            text_color="#374151"
+        ).pack(
+            pady=(0, 3)
+        )
 
         ctk.CTkLabel(
             popup,
             text=f"Current Stock: {current_stock}",
-            font=("Poppins", 13),
-            text_color="gray40"
-        ).pack(pady=(0, 15))
+            font=("Poppins", 12),
+            text_color="#64748B"
+        ).pack(
+            pady=(0, 15)
+        )
+
+        # ======================================================
+        # SCROLLABLE FORM
+        # ======================================================
+
+        content = ctk.CTkScrollableFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        content.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 5)
+        )
+
+        # ======================================================
+        # SUPPLIER
+        # ======================================================
+
+        ctk.CTkLabel(
+            content,
+            text="Supplier",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(8, 4)
+        )
+
+        supplier_var = ctk.StringVar()
+
+        supplier_entry = ctk.CTkEntry(
+            content,
+            textvariable=supplier_var,
+            height=40,
+            placeholder_text="Enter supplier name"
+        )
+
+        supplier_entry.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # QUANTITY
+        # ======================================================
+
+        ctk.CTkLabel(
+            content,
+            text="Quantity Received",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(5, 4)
+        )
 
         quantity_var = ctk.StringVar()
 
-        ctk.CTkLabel(
-            popup,
-            text="Quantity to Add",
-            font=("Poppins", 13, "bold")
-        ).pack(anchor="w", padx=30)
-
         quantity_entry = ctk.CTkEntry(
-            popup,
+            content,
             textvariable=quantity_var,
-            width=340,
-            height=40
+            height=40,
+            placeholder_text="Enter quantity"
         )
-        quantity_entry.pack(padx=30, pady=8)
 
-        status = ctk.CTkLabel(popup, text="")
-        status.pack()
+        quantity_entry.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # PURCHASE PRICE
+        # ======================================================
+
+        ctk.CTkLabel(
+            content,
+            text="Purchase Price / Unit",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(5, 4)
+        )
+
+        purchase_price_var = ctk.StringVar()
+
+        purchase_price_entry = ctk.CTkEntry(
+            content,
+            textvariable=purchase_price_var,
+            height=40,
+            placeholder_text="Example: 150.00"
+        )
+
+        purchase_price_entry.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # TOTAL COST
+        # ======================================================
+
+        total_var = ctk.StringVar(
+            value="Total Purchase Cost: ₹0.00"
+        )
+
+        ctk.CTkLabel(
+            content,
+            textvariable=total_var,
+            font=("Poppins", 16, "bold"),
+            text_color="#EA580C"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(12, 8)
+        )
+
+        # ======================================================
+        # STATUS
+        # ======================================================
+
+        status_var = ctk.StringVar()
+
+        ctk.CTkLabel(
+            content,
+            textvariable=status_var,
+            font=("Poppins", 10, "bold"),
+            text_color="#B45309"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(0, 15)
+        )
+
+        # ======================================================
+        # LIVE TOTAL
+        # ======================================================
+
+        def update_total(event=None):
+
+            try:
+
+                quantity = int(
+                    quantity_var.get().strip()
+                )
+
+                purchase_price = float(
+                    purchase_price_var.get().strip()
+                )
+
+                if quantity <= 0 or purchase_price < 0:
+                    raise ValueError
+
+                total = (
+                    quantity
+                    * purchase_price
+                )
+
+                total_var.set(
+                    f"Total Purchase Cost: "
+                    f"₹{total:,.2f}"
+                )
+
+                status_var.set("")
+
+            except ValueError:
+
+                total_var.set(
+                    "Total Purchase Cost: ₹0.00"
+                )
+
+        quantity_entry.bind(
+            "<KeyRelease>",
+            update_total
+        )
+
+        purchase_price_entry.bind(
+            "<KeyRelease>",
+            update_total
+        )
+
+        # ======================================================
+        # FIXED BUTTON AREA
+        # ======================================================
+
+        button_frame = ctk.CTkFrame(
+            popup,
+            fg_color="white"
+        )
+
+        button_frame.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ======================================================
+        # SAVE STOCK
+        # ======================================================
 
         def save_stock():
 
-            try:
-                quantity_to_add = int(quantity_var.get())
+            supplier = (
+                supplier_var.get()
+                .strip()
+            )
 
-                if quantity_to_add <= 0:
-                    raise ValueError
+            try:
+
+                quantity_to_add = int(
+                    quantity_var.get().strip()
+                )
+
+                purchase_price = float(
+                    purchase_price_var.get().strip()
+                )
 
             except ValueError:
-                status.configure(
-                    text="Enter a valid stock quantity.",
-                    text_color="red"
+
+                status_var.set(
+                    "Enter valid quantity and purchase price."
                 )
+
                 return
 
-            # Backend function
-            add_stock(product_id, quantity_to_add)
+            if quantity_to_add <= 0:
+
+                status_var.set(
+                    "Quantity must be greater than zero."
+                )
+
+                return
+
+            if purchase_price < 0:
+
+                status_var.set(
+                    "Purchase price cannot be negative."
+                )
+
+                return
+
+            try:
+
+                result = add_stock(
+                    product_id,
+                    quantity_to_add,
+                    supplier,
+                    purchase_price
+                )
+
+            except Exception as error:
+
+                status_var.set(
+                    f"Stock update failed: {error}"
+                )
+
+                return
+
+            if not result.get(
+                "success"
+            ):
+
+                status_var.set(
+                    "Unable to update stock."
+                )
+
+                return
+
+            new_stock = result[
+                "new_stock"
+            ]
+
+            total_cost = result[
+                "total_cost"
+            ]
 
             popup.destroy()
 
@@ -2401,18 +2698,39 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
             messagebox.showinfo(
                 "Stock Updated",
-                f"{quantity_to_add} units added to {product_name.title()}."
+                f"Product: {product_name.title()}\n"
+                f"Quantity Added: {quantity_to_add}\n"
+                f"New Stock: {new_stock}\n"
+                f"Purchase Cost: ₹{total_cost:,.2f}"
             )
 
         ctk.CTkButton(
-            popup,
-            text="Add Stock",
-            width=340,
+            button_frame,
+            text="📦 Add Stock",
             height=42,
             fg_color="#EA580C",
             hover_color="#C2410C",
+            font=("Poppins", 13, "bold"),
             command=save_stock
-        ).pack(pady=20)
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            height=42,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            font=("Poppins", 13, "bold"),
+            command=popup.destroy
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        supplier_entry.focus_set()
         
     # ==========================================================
     # DELETE PRODUCT POPUP

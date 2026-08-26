@@ -18,7 +18,10 @@ from backend import (
     get_sale_for_return,
     get_sale_items_for_return,
     process_return,
-    get_return_history
+    get_return_history,
+    get_purchase_history,
+    get_today_purchase_analytics,
+    get_today_profit_analytics
 )
 
 
@@ -49,6 +52,10 @@ class ReportsPage(ctk.CTkScrollableFrame):
         self.low_inventory_var = ctk.StringVar(value="0")
         self.out_stock_var = ctk.StringVar(value="0")
         self.health_score_var = ctk.StringVar(value="0%")
+        self.today_purchase_var = ctk.StringVar(value="₹0.00")
+        self.purchase_count_var = ctk.StringVar(value="0")
+        self.gross_profit_var = ctk.StringVar(value="₹0.00")
+        self.profit_margin_var = ctk.StringVar(value="0.00%")
 
         self.build_ui()
         self.load_reports()     
@@ -400,6 +407,78 @@ class ReportsPage(ctk.CTkScrollableFrame):
             0,2
         )
 
+
+        # =====================================================
+        # PURCHASE ANALYTICS
+        # =====================================================
+
+        purchase_cards = ctk.CTkFrame(
+            self,
+            fg_color="transparent"
+        )
+
+        purchase_cards.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
+
+        purchase_cards.grid_columnconfigure(
+            (0, 1),
+            weight=1
+        )
+
+        self.create_card(
+            purchase_cards,
+            "📦 Today's Purchases",
+            self.today_purchase_var,
+            0,
+            0
+        )
+
+        self.create_card(
+            purchase_cards,
+            "🧾 Purchase Transactions",
+            self.purchase_count_var,
+            0,
+            1
+        )
+
+        # =====================================================
+        # REALIZED PROFIT
+        # =====================================================
+
+        profit_cards = ctk.CTkFrame(
+            self,
+            fg_color="transparent"
+        )
+
+        profit_cards.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
+
+        profit_cards.grid_columnconfigure(
+            (0, 1),
+            weight=1
+        )
+
+        self.create_card(
+            profit_cards,
+            "📈 Today's Gross Profit",
+            self.gross_profit_var,
+            0,
+            0
+        )
+
+        self.create_card(
+            profit_cards,
+            "📊 Profit Margin",
+            self.profit_margin_var,
+            0,
+            1
+        )
         # =====================================================
         # TABLE SECTION
         # =====================================================
@@ -764,6 +843,129 @@ class ReportsPage(ctk.CTkScrollableFrame):
             fill="y"
         )
 
+        # ==========================================================
+        # PURCHASE HISTORY
+        # ==========================================================
+
+        purchase_history_frame = ctk.CTkFrame(
+            self,
+            fg_color="#E5E7EB",
+            corner_radius=10
+        )
+
+        purchase_history_frame.pack(
+            fill="x",
+            padx=30,
+            pady=(0, 20)
+        )
+
+        ctk.CTkLabel(
+            purchase_history_frame,
+            text="📦 Purchase History",
+            font=("Poppins", 18, "bold"),
+            text_color="#EA580C"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(15, 10)
+        )
+
+        purchase_table_frame = ctk.CTkFrame(
+            purchase_history_frame,
+            fg_color="transparent"
+        )
+
+        purchase_table_frame.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=(0, 15)
+        )
+
+        purchase_columns = (
+            "Purchase ID",
+            "Supplier",
+            "Product",
+            "Qty",
+            "Purchase Price",
+            "Total Cost",
+            "Date"
+        )
+
+        self.purchase_table = ttk.Treeview(
+            purchase_table_frame,
+            columns=purchase_columns,
+            show="headings",
+            height=6
+        )
+
+        for col in purchase_columns:
+
+            self.purchase_table.heading(
+                col,
+                text=col
+            )
+
+        self.purchase_table.column(
+            "Purchase ID",
+            width=90,
+            anchor="center"
+        )
+
+        self.purchase_table.column(
+            "Supplier",
+            width=150
+        )
+
+        self.purchase_table.column(
+            "Product",
+            width=170
+        )
+
+        self.purchase_table.column(
+            "Qty",
+            width=70,
+            anchor="center"
+        )
+
+        self.purchase_table.column(
+            "Purchase Price",
+            width=120,
+            anchor="e"
+        )
+
+        self.purchase_table.column(
+            "Total Cost",
+            width=120,
+            anchor="e"
+        )
+
+        self.purchase_table.column(
+            "Date",
+            width=150,
+            anchor="center"
+        )
+
+        purchase_scroll = ttk.Scrollbar(
+            purchase_table_frame,
+            orient="vertical",
+            command=self.purchase_table.yview
+        )
+
+        self.purchase_table.configure(
+            yscrollcommand=purchase_scroll.set
+        )
+
+        self.purchase_table.pack(
+            side="left",
+            fill="both",
+            expand=True
+        )
+
+        purchase_scroll.pack(
+            side="right",
+            fill="y"
+        )
         # =====================================================
         # LOW STOCK TABLE
         # =====================================================
@@ -1810,6 +2012,8 @@ class ReportsPage(ctk.CTkScrollableFrame):
         inventory = get_inventory_value()
         payment = get_payment_analytics()
         health = get_inventory_health()
+        purchase_analytics = get_today_purchase_analytics()
+        profit = get_today_profit_analytics()
 
 
         cash = payment["Cash"]["amount"]
@@ -1877,6 +2081,23 @@ class ReportsPage(ctk.CTkScrollableFrame):
         self.profit_value_var.set(
             f"₹{inventory['expected_profit']:.2f}"
         )
+
+        self.today_purchase_var.set(
+            f"₹{purchase_analytics['amount']:,.2f}"
+        )
+
+        self.purchase_count_var.set(
+            str(purchase_analytics["count"])
+        )
+
+        self.gross_profit_var.set(
+            f"₹{profit['gross_profit']:,.2f}"
+        )
+
+        self.profit_margin_var.set(
+            f"{profit['profit_margin']:.2f}%"
+        )
+
 
         
         # Best Selling Table
@@ -2034,6 +2255,53 @@ class ReportsPage(ctk.CTkScrollableFrame):
                     quantity,
                     f"₹{float(refund_amount):,.2f}",
                     return_date.strftime(
+                        "%d-%b-%Y %H:%M"
+                    )
+                )
+            )
+
+        # =====================================================
+        # PURCHASE HISTORY
+        # =====================================================
+
+        for row in self.purchase_table.get_children():
+            self.purchase_table.delete(row)
+
+        purchases = get_purchase_history()
+
+        for (
+            purchase_id,
+            supplier,
+            product,
+            quantity,
+            purchase_price,
+            total_cost,
+            purchase_date
+        ) in purchases:
+
+            supplier_name = (
+                supplier.title()
+                if supplier
+                else "Unknown Supplier"
+            )
+
+            product_name = (
+                product.title()
+                if product
+                else "Unknown Product"
+            )
+
+            self.purchase_table.insert(
+                "",
+                "end",
+                values=(
+                    purchase_id,
+                    supplier_name,
+                    product_name,
+                    quantity,
+                    f"₹{float(purchase_price):,.2f}",
+                    f"₹{float(total_cost):,.2f}",
+                    purchase_date.strftime(
                         "%d-%b-%Y %H:%M"
                     )
                 )

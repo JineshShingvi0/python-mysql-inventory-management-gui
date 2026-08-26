@@ -178,47 +178,189 @@ def update_product(product_id, name, category,
     return True
 
 # ==========================================================
-# ADD STOCK TO PRODUCT
+# ADD STOCK / RECORD PURCHASE
 # ==========================================================
 
-def add_stock(product_id, quantity_added):
+def add_stock(
+    product_id,
+    quantity_added,
+    supplier=None,
+    purchase_price=0
+):
 
     connection = get_connection()
     cursor = connection.cursor()
 
-    # Get current stock
-    cursor.execute(
-        "SELECT stock FROM products WHERE product_id=%s",
-        (product_id,)
-    )
+    try:
 
-    current_stock = cursor.fetchone()[0]
-    new_stock = current_stock + quantity_added
+        # --------------------------------------------------
+        # Validate quantity
+        # --------------------------------------------------
 
-    # Update stock
-    cursor.execute(
-        "UPDATE products SET stock=%s WHERE product_id=%s",
-        (new_stock, product_id)
-    )
+        if quantity_added <= 0:
+            raise ValueError(
+                "Quantity must be greater than zero."
+            )
 
-    # Record stock movement
+        # --------------------------------------------------
+        # Validate purchase price
+        # --------------------------------------------------
+
+        if purchase_price < 0:
+            raise ValueError(
+                "Purchase price cannot be negative."
+            )
+
+        # --------------------------------------------------
+        # Get current stock
+        # --------------------------------------------------
+
+        cursor.execute(
+            """
+            SELECT stock
+            FROM products
+            WHERE product_id = %s
+            FOR UPDATE
+            """,
+            (product_id,)
+        )
+
+        result = cursor.fetchone()
+
+        if not result:
+            raise ValueError(
+                "Product not found."
+            )
+
+        current_stock = int(
+            result[0]
+        )
+
+        new_stock = (
+            current_stock
+            + quantity_added
+        )
+
+        # --------------------------------------------------
+        # Update product stock
+        # --------------------------------------------------
+
+        cursor.execute(
+            """
+            UPDATE products
+            SET stock = %s
+            WHERE product_id = %s
+            """,
+            (
+                new_stock,
+                product_id
+            )
+        )
+
+        # --------------------------------------------------
+        # Calculate total purchase cost
+        # --------------------------------------------------
+
+        total_cost = (
+            quantity_added
+            * float(purchase_price)
+        )
+
+        # --------------------------------------------------
+        # Record purchase
+        # --------------------------------------------------
+
+        cursor.execute(
+            """
+            INSERT INTO purchases (
+                product_id,
+                supplier,
+                quantity,
+                purchase_price,
+                total_cost
+            )
+            VALUES (%s, %s, %s, %s, %s)
+            """,
+            (
+                product_id,
+                supplier.strip()
+                if supplier
+                else None,
+                quantity_added,
+                purchase_price,
+                total_cost
+            )
+        )
+
+        # --------------------------------------------------
+        # Record stock movement
+        # --------------------------------------------------
+
+        cursor.execute(
+            """
+            INSERT INTO stock_movements (
+                product_id,
+                movement_type,
+                quantity,
+                stock_after
+            )
+            VALUES (%s, %s, %s, %s)
+            """,
+            (
+                product_id,
+                "STOCK IN",
+                quantity_added,
+                new_stock
+            )
+        )
+
+        connection.commit()
+
+        return {
+            "success": True,
+            "new_stock": new_stock,
+            "total_cost": total_cost
+        }
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        connection.close()
+
+# ==========================================================
+# GET PURCHASE HISTORY
+# ==========================================================
+
+def get_purchase_history(limit=50):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
     cursor.execute("""
-        INSERT INTO stock_movements
-        (product_id, movement_type, quantity, stock_after)
-        VALUES (%s, %s, %s, %s)
-    """, (
-        product_id,
-        "STOCK IN",
-        quantity_added,
-        new_stock
-    ))
+        SELECT
+            pu.purchase_id,
+            pu.supplier,
+            p.name,
+            pu.quantity,
+            pu.purchase_price,
+            pu.total_cost,
+            pu.purchase_date
+        FROM purchases pu
+        JOIN products p
+            ON pu.product_id = p.product_id
+        ORDER BY pu.purchase_date DESC
+        LIMIT %s
+    """, (limit,))
 
-    connection.commit()
+    purchases = cursor.fetchall()
 
     cursor.close()
     connection.close()
 
-    return True
+    return purchases
 
 def get_product_by_id(product_id):
 
@@ -687,60 +829,131 @@ def add_sale_items(sale_id, cart):
     connection = get_connection()
     cursor = connection.cursor()
 
-    for item in cart:
+    try:
 
-        # 1️⃣ Save sold item into sale_items table
-        cursor.execute("""
-            INSERT INTO sale_items
-            (sale_id, product_id, quantity, selling_price, subtotal)
-            VALUES (%s, %s, %s, %s, %s)
-        """, (
-            sale_id,
-            item["id"],
-            item["quantity"],
-            item["price"],
-            item["subtotal"]
-        ))
+        for item in cart:
 
-        # 2️⃣ Get current stock
-        cursor.execute(
-            "SELECT stock FROM products WHERE product_id=%s",
-            (item["id"],)
-        )
+            product_id = item["id"]
+            quantity = int(item["quantity"])
+            selling_price = float(item["price"])
+            subtotal = float(item["subtotal"])
 
-        current_stock = cursor.fetchone()[0]
+            # --------------------------------------------------
+            # Get the CURRENT purchase cost of the product
+            # --------------------------------------------------
 
-        stock_after = current_stock - item["quantity"]
+            cursor.execute("""
+                SELECT purchase_price
+                FROM products
+                WHERE product_id = %s
+                FOR UPDATE
+            """, (product_id,))
 
-        # 3️⃣ Update stock in products table
-        cursor.execute("""
-            UPDATE products
-            SET stock=%s
-            WHERE product_id=%s
-        """, (
-            stock_after,
-            item["id"]
-        ))
+            result = cursor.fetchone()
 
-        # 4️⃣ Record SALE movement  ← ADD HERE
-        cursor.execute("""
-            INSERT INTO stock_movements
-            (product_id, movement_type, quantity, stock_after)
-            VALUES (%s, %s, %s, %s)
-        """, (
-            item["id"],
-            "SALE",
-            item["quantity"],
-            stock_after
-        ))
+            if not result:
+                raise ValueError(
+                    f"Product {product_id} not found."
+                )
 
-    # 5️⃣ Commit once after the loop
-    connection.commit()
+            purchase_price = float(
+                result[0]
+            )
 
-    cursor.close()
-    connection.close()
+            # --------------------------------------------------
+            # Save sale item including purchase price
+            # --------------------------------------------------
 
-    return True
+            cursor.execute("""
+                INSERT INTO sale_items (
+                    sale_id,
+                    product_id,
+                    quantity,
+                    selling_price,
+                    purchase_price,
+                    subtotal
+                )
+                VALUES (%s, %s, %s, %s, %s, %s)
+            """, (
+                sale_id,
+                product_id,
+                quantity,
+                selling_price,
+                purchase_price,
+                subtotal
+            ))
+
+            # --------------------------------------------------
+            # Get current stock
+            # --------------------------------------------------
+
+            cursor.execute("""
+                SELECT stock
+                FROM products
+                WHERE product_id = %s
+                FOR UPDATE
+            """, (product_id,))
+
+            current_stock = cursor.fetchone()[0]
+
+            # --------------------------------------------------
+            # Check stock
+            # --------------------------------------------------
+
+            if current_stock < quantity:
+
+                raise ValueError(
+                    f"Insufficient stock for product ID "
+                    f"{product_id}."
+                )
+
+            stock_after = (
+                current_stock - quantity
+            )
+
+            # --------------------------------------------------
+            # Update stock
+            # --------------------------------------------------
+
+            cursor.execute("""
+                UPDATE products
+                SET stock = %s
+                WHERE product_id = %s
+            """, (
+                stock_after,
+                product_id
+            ))
+
+            # --------------------------------------------------
+            # Record SALE stock movement
+            # --------------------------------------------------
+
+            cursor.execute("""
+                INSERT INTO stock_movements (
+                    product_id,
+                    movement_type,
+                    quantity,
+                    stock_after
+                )
+                VALUES (%s, %s, %s, %s)
+            """, (
+                product_id,
+                "SALE",
+                quantity,
+                stock_after
+            ))
+
+        connection.commit()
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 # ==========================================================
 # UPDATE PRODUCT STOCK AFTER SALE
@@ -1185,6 +1398,151 @@ def get_low_stock_products():
     connection.close()
 
     return products
+
+# ==========================================================
+# TODAY'S PURCHASE ANALYTICS
+# ==========================================================
+
+def get_today_purchase_analytics():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(total_cost), 0),
+            COUNT(*)
+        FROM purchases
+        WHERE DATE(purchase_date) = CURDATE()
+    """)
+
+    total_amount, transaction_count = cursor.fetchone()
+
+    cursor.close()
+    connection.close()
+
+    return {
+        "amount": float(total_amount or 0),
+        "count": int(transaction_count or 0)
+    }
+
+
+# ==========================================================
+# TODAY'S REALIZED PROFIT ANALYTICS
+# RETURN-AWARE
+# ==========================================================
+
+def get_today_profit_analytics():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    # ------------------------------------------------------
+    # Total revenue and original COGS from today's sales
+    # ------------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(si.subtotal), 0),
+            COALESCE(
+                SUM(
+                    si.purchase_price * si.quantity
+                ),
+                0
+            )
+        FROM sale_items si
+        JOIN sales s
+            ON si.sale_id = s.sale_id
+        WHERE DATE(s.sale_date) = CURDATE()
+    """)
+
+    sales_revenue, sales_cogs = cursor.fetchone()
+
+    sales_revenue = float(
+        sales_revenue or 0
+    )
+
+    sales_cogs = float(
+        sales_cogs or 0
+    )
+
+    # ------------------------------------------------------
+    # Today's refunds
+    # ------------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(r.refund_amount), 0)
+        FROM returns r
+        WHERE DATE(r.return_date) = CURDATE()
+    """)
+
+    total_refunds = float(
+        cursor.fetchone()[0] or 0
+    )
+
+    # ------------------------------------------------------
+    # Cost of returned items
+    #
+    # Use the historical purchase_price saved in sale_items
+    # ------------------------------------------------------
+
+    cursor.execute("""
+        SELECT
+            COALESCE(
+                SUM(
+                    si.purchase_price * r.quantity
+                ),
+                0
+            )
+        FROM returns r
+        JOIN sale_items si
+            ON r.sale_item_id = si.sale_item_id
+        WHERE DATE(r.return_date) = CURDATE()
+    """)
+
+    returned_cogs = float(
+        cursor.fetchone()[0] or 0
+    )
+
+    # ------------------------------------------------------
+    # Return-aware calculations
+    # ------------------------------------------------------
+
+    net_revenue = (
+        sales_revenue
+        - total_refunds
+    )
+
+    net_cogs = (
+        sales_cogs
+        - returned_cogs
+    )
+
+    gross_profit = (
+        net_revenue
+        - net_cogs
+    )
+
+    profit_margin = (
+        (gross_profit / net_revenue) * 100
+        if net_revenue > 0
+        else 0
+    )
+
+    cursor.close()
+    connection.close()
+
+    return {
+        "revenue": sales_revenue,
+        "refunds": total_refunds,
+        "net_revenue": net_revenue,
+        "cost_of_goods": sales_cogs,
+        "returned_cogs": returned_cogs,
+        "net_cogs": net_cogs,
+        "gross_profit": gross_profit,
+        "profit_margin": profit_margin
+    }
 
 # ==========================================================
 # DASHBOARD INVENTORY ALERT SUMMARY
