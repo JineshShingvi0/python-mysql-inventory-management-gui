@@ -6,6 +6,7 @@ from gui.billing import BillingPage
 from gui.customers import CustomersPage
 from datetime import datetime
 from gui.reports import ReportsPage
+from gui.suppliers import SuppliersPage
 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
@@ -193,8 +194,18 @@ class ShingviSupermartApp(ctk.CTk):
         )
         self.customers_btn.configure(command=self.show_customers)
 
+        self.suppliers_btn = self.create_sidebar_button(
+            "🏭 Suppliers",
+            7,
+            None
+        )
+
+        self.suppliers_btn.configure(
+            command=self.show_suppliers
+        )
+
         self.reports_btn = self.create_sidebar_button(
-            "📊 Reports", 7, None
+            "📊 Reports", 8, None
         )
         self.reports_btn.configure(command=self.show_reports)
 
@@ -251,6 +262,10 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.customers_page = CustomersPage(self.content)
         self.customers_page.pack_forget()
+
+        self.suppliers_page = SuppliersPage(self.content)
+        self.suppliers_page.pack_forget()
+
 
         self.reports_page = ReportsPage(self.content)
         self.reports_page.pack_forget()
@@ -1060,20 +1075,27 @@ class ShingviSupermartApp(ctk.CTk):
         self.billing_page.pack_forget()
         self.customers_page.pack_forget()
         self.reports_page.pack_forget()
+        self.suppliers_page.pack_forget()
 
     def highlight_button(self, active_button):
+
         buttons = [
             self.dashboard_btn,
             self.products_btn,
             self.billing_btn,
             self.customers_btn,
+            self.suppliers_btn,
             self.reports_btn
         ]
 
         for button in buttons:
-            button.configure(fg_color="transparent")
+            button.configure(
+                fg_color="transparent"
+            )
 
-        active_button.configure(fg_color="#047857")
+        active_button.configure(
+            fg_color="#047857"
+        )
 
     def show_dashboard(self):
 
@@ -1114,6 +1136,19 @@ class ShingviSupermartApp(ctk.CTk):
         self.customers_page.load_customers()
 
         self.highlight_button(self.customers_btn)
+
+    def show_suppliers(self):
+
+        self.hide_all_pages()
+
+        self.suppliers_page.pack(
+            fill="both",
+            expand=True
+        )
+
+        self.highlight_button(
+        self.suppliers_btn
+        )
 
     def show_reports(self):
         self.hide_all_pages()

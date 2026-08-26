@@ -19,6 +19,7 @@ from backend import (
     add_product_with_barcode,
     update_product,
     add_stock,
+    get_all_suppliers,
     delete_product,
     get_product_by_id,
     search_products,
@@ -2439,20 +2440,39 @@ class ProductsPage(ctk.CTkScrollableFrame):
             pady=(8, 4)
         )
 
-        supplier_var = ctk.StringVar()
+        suppliers = get_all_suppliers()
 
-        supplier_entry = ctk.CTkEntry(
-            content,
-            textvariable=supplier_var,
-            height=40,
-            placeholder_text="Enter supplier name"
+        supplier_map = {
+            f"{supplier[0]} - {supplier[1]}": supplier[0]
+            for supplier in suppliers
+        }
+
+        supplier_names = list(
+            supplier_map.keys()
         )
 
-        supplier_entry.pack(
+        supplier_var = ctk.StringVar()
+
+        supplier_combo = ctk.CTkComboBox(
+            content,
+            values=supplier_names
+            if supplier_names
+            else ["No suppliers available"],
+            variable=supplier_var,
+            height=40,
+            state="readonly"
+        )
+
+        supplier_combo.pack(
             fill="x",
             padx=20,
             pady=(0, 10)
         )
+
+        if supplier_names:
+            supplier_combo.set(
+                supplier_names[0]
+            )
 
         # ======================================================
         # QUANTITY
@@ -2618,10 +2638,26 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         def save_stock():
 
-            supplier = (
+            selected_supplier = (
                 supplier_var.get()
                 .strip()
             )
+
+            if (
+                not supplier_names
+                or selected_supplier
+                not in supplier_map
+            ):
+
+                status_var.set(
+                    "Please select a supplier."
+                )
+
+                return
+
+            supplier_id = supplier_map[
+                selected_supplier
+            ]
 
             try:
 
@@ -2662,7 +2698,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
                 result = add_stock(
                     product_id,
                     quantity_to_add,
-                    supplier,
+                    supplier_id,
                     purchase_price
                 )
 
@@ -2730,7 +2766,8 @@ class ProductsPage(ctk.CTkScrollableFrame):
             pady=3
         )
 
-        supplier_entry.focus_set()
+        if supplier_names:
+            supplier_combo.focus_set()
         
     # ==========================================================
     # DELETE PRODUCT POPUP

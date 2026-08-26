@@ -184,7 +184,7 @@ def update_product(product_id, name, category,
 def add_stock(
     product_id,
     quantity_added,
-    supplier=None,
+    supplier_id=None,
     purchase_price=0
 ):
 
@@ -242,6 +242,32 @@ def add_stock(
         )
 
         # --------------------------------------------------
+        # Get supplier details
+        # --------------------------------------------------
+
+        supplier_name = None
+
+        if supplier_id is not None:
+
+            cursor.execute(
+                """
+                SELECT name
+                FROM suppliers
+                WHERE supplier_id = %s
+                """,
+                (supplier_id,)
+            )
+
+            supplier_result = cursor.fetchone()
+
+            if not supplier_result:
+                raise ValueError(
+                    "Selected supplier was not found."
+                )
+
+            supplier_name = supplier_result[0]
+
+        # --------------------------------------------------
         # Update product stock
         # --------------------------------------------------
 
@@ -274,18 +300,18 @@ def add_stock(
             """
             INSERT INTO purchases (
                 product_id,
+                supplier_id,
                 supplier,
                 quantity,
                 purchase_price,
                 total_cost
             )
-            VALUES (%s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s)
             """,
             (
                 product_id,
-                supplier.strip()
-                if supplier
-                else None,
+                supplier_id,
+                supplier_name,
                 quantity_added,
                 purchase_price,
                 total_cost
@@ -323,10 +349,12 @@ def add_stock(
         }
 
     except Exception:
+
         connection.rollback()
         raise
 
     finally:
+
         cursor.close()
         connection.close()
 
@@ -1543,6 +1571,293 @@ def get_today_profit_analytics():
         "gross_profit": gross_profit,
         "profit_margin": profit_margin
     }
+
+
+# ==========================================================
+# SUPPLIER MANAGEMENT
+# ==========================================================
+
+def get_all_suppliers():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            supplier_id,
+            name,
+            phone,
+            email,
+            address,
+            notes,
+            created_at
+        FROM suppliers
+        ORDER BY name ASC
+    """)
+
+    suppliers = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return suppliers
+
+
+def search_suppliers(keyword):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    search_keyword = f"%{keyword}%"
+
+    cursor.execute("""
+        SELECT
+            supplier_id,
+            name,
+            phone,
+            email,
+            address,
+            notes,
+            created_at
+        FROM suppliers
+        WHERE
+            name LIKE %s
+            OR phone LIKE %s
+            OR email LIKE %s
+        ORDER BY name ASC
+    """, (
+        search_keyword,
+        search_keyword,
+        search_keyword
+    ))
+
+    suppliers = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return suppliers
+
+
+def add_supplier(
+    name,
+    phone=None,
+    email=None,
+    address=None,
+    notes=None
+):
+
+    name = name.strip()
+
+    if not name:
+        raise ValueError(
+            "Supplier name is required."
+        )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        cursor.execute("""
+            INSERT INTO suppliers (
+                name,
+                phone,
+                email,
+                address,
+                notes
+            )
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
+            name,
+            phone.strip() if phone else None,
+            email.strip() if email else None,
+            address.strip() if address else None,
+            notes.strip() if notes else None
+        ))
+
+        connection.commit()
+
+        supplier_id = cursor.lastrowid
+
+        return supplier_id
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
+
+
+def update_supplier(
+    supplier_id,
+    name,
+    phone=None,
+    email=None,
+    address=None,
+    notes=None
+):
+
+    name = name.strip()
+
+    if not name:
+        raise ValueError(
+            "Supplier name is required."
+        )
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        cursor.execute("""
+            UPDATE suppliers
+            SET
+                name = %s,
+                phone = %s,
+                email = %s,
+                address = %s,
+                notes = %s
+            WHERE supplier_id = %s
+        """, (
+            name,
+            phone.strip() if phone else None,
+            email.strip() if email else None,
+            address.strip() if address else None,
+            notes.strip() if notes else None,
+            supplier_id
+        ))
+
+        connection.commit()
+
+        return True
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
+
+
+def delete_supplier(supplier_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    try:
+
+        # Check whether supplier has purchase records
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM purchases
+            WHERE supplier_id = %s
+        """, (supplier_id,))
+
+        purchase_count = cursor.fetchone()[0]
+
+        if purchase_count > 0:
+
+            raise ValueError(
+                "This supplier has purchase records "
+                "and cannot be deleted."
+            )
+
+        cursor.execute("""
+            DELETE FROM suppliers
+            WHERE supplier_id = %s
+        """, (supplier_id,))
+
+        connection.commit()
+
+        return True
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
+
+
+# ==========================================================
+# SUPPLIER SUMMARY
+# ==========================================================
+
+def get_supplier_summary(supplier_id):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            COALESCE(SUM(total_cost), 0),
+            COUNT(*),
+            COALESCE(SUM(quantity), 0),
+            MAX(purchase_date)
+        FROM purchases
+        WHERE supplier_id = %s
+    """, (supplier_id,))
+
+    total_spent, purchase_count, total_units, last_purchase = (
+        cursor.fetchone()
+    )
+
+    cursor.close()
+    connection.close()
+
+    return {
+        "total_spent": float(total_spent or 0),
+        "purchase_count": int(purchase_count or 0),
+        "total_units": int(total_units or 0),
+        "last_purchase": last_purchase
+    }
+
+# ==========================================================
+# SUPPLIER PURCHASE HISTORY
+# ==========================================================
+
+def get_supplier_purchase_history(supplier_id, limit=50):
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            pu.purchase_id,
+            p.name,
+            pu.quantity,
+            pu.purchase_price,
+            pu.total_cost,
+            pu.purchase_date
+        FROM purchases pu
+        JOIN products p
+            ON pu.product_id = p.product_id
+        WHERE pu.supplier_id = %s
+        ORDER BY pu.purchase_date DESC
+        LIMIT %s
+    """, (
+        supplier_id,
+        limit
+    ))
+
+    history = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return history
+
 
 # ==========================================================
 # DASHBOARD INVENTORY ALERT SUMMARY
