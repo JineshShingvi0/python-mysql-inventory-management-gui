@@ -270,6 +270,8 @@ class ShingviSupermartApp(ctk.CTk):
         self.reports_page = ReportsPage(self.content)
         self.reports_page.pack_forget()
 
+        self.setup_global_shortcuts()
+        
         # Show Dashboard First
         self.show_dashboard()
         self.update_dashboard_clock()
@@ -1607,6 +1609,77 @@ class ShingviSupermartApp(ctk.CTk):
         canvas.get_tk_widget().pack(fill="both", expand=True)
 
         plt.close(fig)
+
+    # ==========================================================
+    # GLOBAL KEYBOARD SHORTCUTS
+    # ==========================================================
+
+    def setup_global_shortcuts(self):
+
+        # ------------------------------------------------------
+        # Main navigation
+        # ------------------------------------------------------
+
+        self.bind_all(
+            "<Control-Key-1>",
+            lambda event: self.show_dashboard()
+        )
+
+        self.bind_all(
+            "<Control-Key-2>",
+            lambda event: self.show_products()
+        )
+
+        self.bind_all(
+            "<Control-Key-3>",
+            lambda event: self.show_billing()
+        )
+
+        self.bind_all(
+            "<Control-Key-4>",
+            lambda event: self.show_customers()
+        )
+
+        self.bind_all(
+            "<Control-Key-5>",
+            lambda event: self.show_suppliers()
+        )
+
+        self.bind_all(
+            "<Control-Key-6>",
+            lambda event: self.show_reports()
+        )
+
+        # ------------------------------------------------------
+        # Dashboard quick actions
+        # ------------------------------------------------------
+
+        self.bind_all(
+            "<Alt-Key-b>",
+            lambda event: self.show_billing()
+        )
+
+        self.bind_all(
+            "<Alt-Key-p>",
+            lambda event: self.show_products()
+        )
+
+        self.bind_all(
+            "<Alt-Key-c>",
+            lambda event: self.show_customers()
+        )
+
+        self.bind_all(
+            "<Alt-Key-s>",
+            lambda event: self.show_suppliers()
+        )
+
+        self.bind_all(
+            "<Alt-Key-r>",
+            lambda event: self.show_reports()
+        )
+
+        return "break"
 # ==========================================================
 # RUN APP
 # ==========================================================

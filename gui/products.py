@@ -25,7 +25,8 @@ from backend import (
     search_products,
     get_products_with_barcodes,
     update_product_barcode,
-    generate_product_barcode
+    generate_product_barcode,
+    get_low_stock_products_for_reorder
 )
 
 
@@ -280,6 +281,23 @@ class ProductsPage(ctk.CTkScrollableFrame):
             column=2,
             padx=5
         )
+        #Reorder button
+        self.reorder_button = ctk.CTkButton(
+            action_row,
+            text="🔄 Reorder",
+            width=120,
+            height=38,
+            fg_color="#F59E0B",
+            hover_color="#D97706",
+            command=self.open_reorder_popup
+        )
+
+        self.reorder_button.grid(
+            row=0,
+            column=3,
+            padx=5
+        )
+
 
         # ----------------------------------------------------------
         # Add Product
@@ -297,7 +315,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         self.add_button.grid(
             row=0,
-            column=3,
+            column=4,
             padx=(5, 0)
         )
         # ---------------- Table ----------------
@@ -2768,6 +2786,554 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         if supplier_names:
             supplier_combo.focus_set()
+
+    # ==========================================================
+    # REORDER LOW STOCK PRODUCT
+    # ==========================================================
+
+    def open_reorder_popup(self):
+
+        selected = self.table.selection()
+
+        if not selected:
+
+            messagebox.showwarning(
+                "No Product Selected",
+                "Please select a product first."
+            )
+
+            return
+
+        values = self.table.item(
+            selected[0],
+            "values"
+        )
+
+        product_id = int(
+            values[0]
+        )
+
+        product_name = str(
+            values[1]
+        )
+
+        current_stock = int(
+            values[4]
+        )
+
+        # ------------------------------------------------------
+        # Get product's minimum stock and purchase price
+        # ------------------------------------------------------
+
+        low_stock_products = (
+            get_low_stock_products_for_reorder()
+        )
+
+        product_info = None
+
+        for product in low_stock_products:
+
+            if int(product[0]) == product_id:
+
+                product_info = product
+
+                break
+
+        if not product_info:
+
+            messagebox.showinfo(
+                "Stock Level Healthy",
+                f"{product_name.title()} is not currently "
+                f"below its minimum stock level."
+            )
+
+            return
+
+        (
+            _product_id,
+            _name,
+            _stock,
+            minimum_stock,
+            purchase_price
+        ) = product_info
+
+        minimum_stock = int(
+            minimum_stock
+        )
+
+        purchase_price = float(
+            purchase_price
+        )
+
+        # ------------------------------------------------------
+        # Suggested reorder quantity
+        # ------------------------------------------------------
+        #
+        # Bring stock back to at least 2 × minimum stock.
+        # Example:
+        # Stock = 8
+        # Minimum = 10
+        # Suggested = 12
+        #
+
+        suggested_quantity = max(
+            (minimum_stock * 2) - current_stock,
+            1
+        )
+
+        # ------------------------------------------------------
+        # Popup
+        # ------------------------------------------------------
+
+        popup = ctk.CTkToplevel(
+            self
+        )
+
+        popup.title(
+            "Reorder Product"
+        )
+
+        popup.geometry(
+            "480x620"
+        )
+
+        popup.minsize(
+            480,
+            620
+        )
+
+        popup.maxsize(
+            480,
+            620
+        )
+
+        popup.resizable(
+            False,
+            False
+        )
+
+        popup.grab_set()
+
+        popup.configure(
+            fg_color="white"
+        )
+
+        # ------------------------------------------------------
+        # Header
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            popup,
+            text="🔄 Reorder Product",
+            font=("Poppins", 23, "bold"),
+            text_color="#D97706"
+        ).pack(
+            pady=(20, 5)
+        )
+
+        ctk.CTkLabel(
+            popup,
+            text=product_name.title(),
+            font=("Poppins", 15, "bold"),
+            text_color="#374151"
+        ).pack(
+            pady=(0, 5)
+        )
+
+        ctk.CTkLabel(
+            popup,
+            text=(
+                f"Current Stock: {current_stock}   •   "
+                f"Minimum: {minimum_stock}"
+            ),
+            font=("Poppins", 12),
+            text_color="#64748B"
+        ).pack(
+            pady=(0, 15)
+        )
+
+        # ------------------------------------------------------
+        # Form
+        # ------------------------------------------------------
+
+        content = ctk.CTkScrollableFrame(
+            popup,
+            fg_color="transparent"
+        )
+
+        content.pack(
+            fill="both",
+            expand=True,
+            padx=15,
+            pady=(0, 5)
+        )
+
+        # ------------------------------------------------------
+        # Supplier
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            content,
+            text="Supplier",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(8, 4)
+        )
+
+        suppliers = get_all_suppliers()
+
+        supplier_map = {
+            f"{supplier[0]} - {supplier[1]}": supplier[0]
+            for supplier in suppliers
+        }
+
+        supplier_names = list(
+            supplier_map.keys()
+        )
+
+        supplier_var = ctk.StringVar()
+
+        supplier_combo = ctk.CTkComboBox(
+            content,
+            values=(
+                supplier_names
+                if supplier_names
+                else ["No suppliers available"]
+            ),
+            variable=supplier_var,
+            height=40,
+            state="readonly"
+        )
+
+        supplier_combo.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        if supplier_names:
+
+            supplier_combo.set(
+                supplier_names[0]
+            )
+
+        # ------------------------------------------------------
+        # Quantity
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            content,
+            text="Reorder Quantity",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(5, 4)
+        )
+
+        quantity_var = ctk.StringVar(
+            value=str(
+                suggested_quantity
+            )
+        )
+
+        quantity_entry = ctk.CTkEntry(
+            content,
+            textvariable=quantity_var,
+            height=40
+        )
+
+        quantity_entry.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ------------------------------------------------------
+        # Purchase Price
+        # ------------------------------------------------------
+
+        ctk.CTkLabel(
+            content,
+            text="Purchase Price / Unit",
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(5, 4)
+        )
+
+        purchase_price_var = ctk.StringVar(
+            value=f"{purchase_price:.2f}"
+        )
+
+        purchase_price_entry = ctk.CTkEntry(
+            content,
+            textvariable=purchase_price_var,
+            height=40
+        )
+
+        purchase_price_entry.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        # ------------------------------------------------------
+        # Total Cost
+        # ------------------------------------------------------
+
+        total_var = ctk.StringVar(
+            value=(
+                f"Estimated Purchase Cost: "
+                f"₹{suggested_quantity * purchase_price:,.2f}"
+            )
+        )
+
+        ctk.CTkLabel(
+            content,
+            textvariable=total_var,
+            font=("Poppins", 16, "bold"),
+            text_color="#D97706"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(10, 5)
+        )
+
+        ctk.CTkLabel(
+            content,
+            text=(
+                f"Suggested quantity restores stock "
+                f"to about {minimum_stock * 2} units."
+            ),
+            font=("Poppins", 10),
+            text_color="#64748B"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(0, 15)
+        )
+
+        # ------------------------------------------------------
+        # Live cost update
+        # ------------------------------------------------------
+
+        def update_total(event=None):
+
+            try:
+
+                quantity = int(
+                    quantity_var.get().strip()
+                )
+
+                price = float(
+                    purchase_price_var.get().strip()
+                )
+
+                if quantity <= 0 or price < 0:
+                    raise ValueError
+
+                total = quantity * price
+
+                total_var.set(
+                    f"Estimated Purchase Cost: "
+                    f"₹{total:,.2f}"
+                )
+
+            except ValueError:
+
+                total_var.set(
+                    "Estimated Purchase Cost: ₹0.00"
+                )
+
+        quantity_entry.bind(
+            "<KeyRelease>",
+            update_total
+        )
+
+        purchase_price_entry.bind(
+            "<KeyRelease>",
+            update_total
+        )
+
+        # ------------------------------------------------------
+        # Save reorder
+        # ------------------------------------------------------
+
+        def process_reorder():
+
+            if not supplier_names:
+
+                messagebox.showwarning(
+                    "No Supplier",
+                    "Please create a supplier first.",
+                    parent=popup
+                )
+
+                return
+
+            selected_supplier = (
+                supplier_var.get().strip()
+            )
+
+            supplier_id = supplier_map.get(
+                selected_supplier
+            )
+
+            if not supplier_id:
+
+                messagebox.showwarning(
+                    "No Supplier Selected",
+                    "Please select a supplier.",
+                    parent=popup
+                )
+
+                return
+
+            try:
+
+                quantity = int(
+                    quantity_var.get().strip()
+                )
+
+                price = float(
+                    purchase_price_var.get().strip()
+                )
+
+            except ValueError:
+
+                messagebox.showerror(
+                    "Invalid Input",
+                    "Enter a valid quantity and purchase price.",
+                    parent=popup
+                )
+
+                return
+
+            if quantity <= 0:
+
+                messagebox.showerror(
+                    "Invalid Quantity",
+                    "Quantity must be greater than zero.",
+                    parent=popup
+                )
+
+                return
+
+            if price < 0:
+
+                messagebox.showerror(
+                    "Invalid Price",
+                    "Purchase price cannot be negative.",
+                    parent=popup
+                )
+
+                return
+
+            total_cost = quantity * price
+
+            confirm = messagebox.askyesno(
+                "Confirm Reorder",
+                f"Product: {product_name.title()}\n"
+                f"Supplier: {selected_supplier}\n"
+                f"Quantity: {quantity}\n"
+                f"Purchase Price: ₹{price:,.2f}\n"
+                f"Total Cost: ₹{total_cost:,.2f}\n\n"
+                f"Create this purchase?",
+                parent=popup
+            )
+
+            if not confirm:
+                return
+
+            try:
+
+                result = add_stock(
+                    product_id,
+                    quantity,
+                    supplier_id,
+                    price
+                )
+
+            except Exception as error:
+
+                messagebox.showerror(
+                    "Reorder Failed",
+                    str(error),
+                    parent=popup
+                )
+
+                return
+
+            if not result.get("success"):
+
+                messagebox.showerror(
+                    "Reorder Failed",
+                    "Unable to complete the reorder.",
+                    parent=popup
+                )
+
+                return
+
+            popup.destroy()
+
+            self.load_products()
+
+            messagebox.showinfo(
+                "Reorder Successful",
+                f"{product_name.title()} reordered successfully.\n\n"
+                f"Quantity Added: {quantity}\n"
+                f"New Stock: {result['new_stock']}\n"
+                f"Purchase Cost: ₹{result['total_cost']:,.2f}"
+            )
+
+        # ------------------------------------------------------
+        # Buttons
+        # ------------------------------------------------------
+
+        button_frame = ctk.CTkFrame(
+            popup,
+            fg_color="white"
+        )
+
+        button_frame.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 10)
+        )
+
+        ctk.CTkButton(
+            button_frame,
+            text="🔄 Create Reorder",
+            height=42,
+            fg_color="#F59E0B",
+            hover_color="#D97706",
+            font=("Poppins", 13, "bold"),
+            command=process_reorder
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        ctk.CTkButton(
+            button_frame,
+            text="Cancel",
+            height=42,
+            fg_color="#6B7280",
+            hover_color="#4B5563",
+            command=popup.destroy
+        ).pack(
+            fill="x",
+            pady=3
+        )
+
+        quantity_entry.focus_set()
         
     # ==========================================================
     # DELETE PRODUCT POPUP

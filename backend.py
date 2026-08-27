@@ -1428,6 +1428,34 @@ def get_low_stock_products():
     return products
 
 # ==========================================================
+# LOW STOCK PRODUCTS FOR REORDER
+# ==========================================================
+
+def get_low_stock_products_for_reorder():
+
+    connection = get_connection()
+    cursor = connection.cursor()
+
+    cursor.execute("""
+        SELECT
+            product_id,
+            name,
+            stock,
+            minimum_stock,
+            purchase_price
+        FROM products
+        WHERE stock <= minimum_stock
+        ORDER BY stock ASC, name ASC
+    """)
+
+    products = cursor.fetchall()
+
+    cursor.close()
+    connection.close()
+
+    return products
+
+# ==========================================================
 # TODAY'S PURCHASE ANALYTICS
 # ==========================================================
 
