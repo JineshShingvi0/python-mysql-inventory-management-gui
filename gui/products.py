@@ -1,21 +1,13 @@
 import customtkinter as ctk
 import os
 import barcode
-
-from reportlab.graphics.barcode import createBarcodeDrawing
-from reportlab.graphics import renderPDF
-from reportlab.graphics.shapes import Drawing
-
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import A4
-from reportlab.lib.utils import ImageReader
+import subprocess
 
 from barcode.writer import ImageWriter
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 from tkinter import ttk, messagebox
+
 from backend import (
-    get_all_products,
-    add_product,
     add_product_with_barcode,
     update_product,
     add_stock,
@@ -29,8 +21,28 @@ from backend import (
     get_low_stock_products_for_reorder
 )
 
-
 class ProductsPage(ctk.CTkScrollableFrame):
+
+    PRODUCT_CATEGORIES = [
+            "Oil",
+            "Grocery",
+            "Snacks",
+            "Beverages",
+            "Household",
+            "Personal Care",
+            "Clothing"
+        ]
+    
+    BASE_DIR = os.path.dirname(
+        os.path.dirname(
+            os.path.abspath(__file__)
+        )
+    )
+
+    BARCODE_IMAGES_DIR = os.path.join(
+        BASE_DIR,
+        "barcode_images"
+    )
 
     def __init__(self, parent):
         super().__init__(
@@ -41,7 +53,6 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         self.build_ui()
         self.load_products()
-
     # ==========================================================
     # BUILD PRODUCTS PAGE
     # ==========================================================
@@ -102,7 +113,12 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
         top_row.grid_columnconfigure(0, weight=1)
-        top_row.grid_columnconfigure(1, weight=0)
+
+        for column in range(1, 5):
+            top_row.grid_columnconfigure(
+                column,
+                weight=0
+            )
 
         # ----------------------------------------------------------
         # Search
@@ -280,8 +296,11 @@ class ProductsPage(ctk.CTkScrollableFrame):
             row=0,
             column=2,
             padx=5
-        )
-        #Reorder button
+                )
+
+        # ----------------------------------------------------------
+        # Reorder
+        # ----------------------------------------------------------
         self.reorder_button = ctk.CTkButton(
             action_row,
             text="🔄 Reorder",
@@ -359,23 +378,6 @@ class ProductsPage(ctk.CTkScrollableFrame):
         self.table.column("Stock", width=90, anchor="center")
         self.table.column("Barcode", width=170, anchor="center")
 
-        style = ttk.Style()
-        style.theme_use("default")
-
-        style.configure(
-            "Treeview",
-            rowheight=34,
-            font=("Poppins", 11),
-            background="white",
-            fieldbackground="white"
-        )
-
-        style.configure(
-            "Treeview.Heading",
-            font=("Poppins", 12, "bold"),
-            background="#065F46",
-            foreground="white"
-        )
 
         scrollbar = ttk.Scrollbar(
             table_frame,
@@ -421,32 +423,69 @@ class ProductsPage(ctk.CTkScrollableFrame):
     # ==========================================================
     def load_products(self):
 
-        # Clear old rows
-        for row in self.table.get_children():
-            self.table.delete(row)
-
         products = get_products_with_barcodes()
 
-        # Update count
         self.count_label.configure(
             text=f"{len(products)} Products Available"
         )
 
-        # Insert products
-        for product_id, name, category, selling_price, stock, barcode in products:
+        self.populate_product_table(products)
 
-            self.table.insert(
-                "",
-                "end",
-                values=(
-                    product_id,
-                    name.title(),
-                    category.title() if category else "",
-                    f"₹{float(selling_price):,.2f}",
-                    stock,
-                    barcode or "—"
-                )
-            )
+    def validate_product_values(
+        self,
+        purchase_price,
+        selling_price,
+        stock,
+        minimum_stock
+    ):
+
+        if purchase_price <= 0:
+            return "Purchase price must be greater than 0."
+
+        if selling_price <= 0:
+            return "Selling price must be greater than 0."
+
+        if stock < 0:
+            return "Stock cannot be negative."
+
+        if minimum_stock < 0:
+            return "Minimum stock cannot be negative."
+
+        return None
+
+    # ==========================================================
+    # PRODUCT FORM FIELD HELPER
+    # ==========================================================
+
+    def create_product_field(
+        self,
+        parent,
+        label_text,
+        variable
+    ):
+
+        ctk.CTkLabel(
+            parent,
+            text=label_text,
+            font=("Poppins", 13, "bold")
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(6, 2)
+        )
+
+        entry = ctk.CTkEntry(
+            parent,
+            textvariable=variable,
+            width=430,
+            height=36
+        )
+
+        entry.pack(
+            padx=20
+        )
+
+        return entry
     # ==========================================================
     # ADD PRODUCT POPUP
     # ==========================================================
@@ -512,40 +551,13 @@ class ProductsPage(ctk.CTkScrollableFrame):
         minimum_var = ctk.StringVar()
         barcode_var = ctk.StringVar()
 
-        # ======================================================
-        # FIELD HELPER
-        # ======================================================
-
-        def field(label, variable):
-
-            ctk.CTkLabel(
-                form_frame,
-                text=label,
-                font=("Poppins", 13, "bold")
-            ).pack(
-                anchor="w",
-                padx=20,
-                pady=(6, 2)
-            )
-
-            entry = ctk.CTkEntry(
-                form_frame,
-                textvariable=variable,
-                width=430,
-                height=36
-            )
-
-            entry.pack(
-                padx=20
-            )
-
-            return entry
 
         # ======================================================
         # PRODUCT NAME
         # ======================================================
 
-        field(
+        self.create_product_field(
+            form_frame,
             "Product Name",
             name_var
         )
@@ -566,15 +578,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         combo = ctk.CTkComboBox(
             form_frame,
-            values=[
-                "Oil",
-                "Grocery",
-                "Snacks",
-                "Beverages",
-                "Household",
-                "Personal Care",
-                "Clothing"
-            ],
+            values=self.PRODUCT_CATEGORIES,
             variable=category_var,
             width=430,
             height=36
@@ -588,27 +592,32 @@ class ProductsPage(ctk.CTkScrollableFrame):
         # OTHER FIELDS
         # ======================================================
 
-        field(
+        self.create_product_field(
+            form_frame,
             "Purchase Price",
             purchase_var
         )
 
-        field(
+        self.create_product_field(
+            form_frame,
             "Selling Price",
             selling_var
         )
 
-        field(
+        self.create_product_field(
+            form_frame,
             "Stock Quantity",
             stock_var
         )
 
-        field(
+        self.create_product_field(
+            form_frame,
             "Minimum Stock",
             minimum_var
         )
 
-        field(
+        self.create_product_field(
+            form_frame,
             "Barcode",
             barcode_var
         )
@@ -709,37 +718,17 @@ class ProductsPage(ctk.CTkScrollableFrame):
             # VALUE VALIDATION
             # --------------------------------------------------
 
-            if purchase_price <= 0:
+            error = self.validate_product_values(
+                purchase_price,
+                selling_price,
+                stock,
+                minimum_stock
+            )
+
+            if error:
 
                 status.configure(
-                    text="Purchase price must be greater than 0.",
-                    text_color="red"
-                )
-
-                return
-
-            if selling_price <= 0:
-
-                status.configure(
-                    text="Selling price must be greater than 0.",
-                    text_color="red"
-                )
-
-                return
-
-            if stock < 0:
-
-                status.configure(
-                    text="Stock cannot be negative.",
-                    text_color="red"
-                )
-
-                return
-
-            if minimum_stock < 0:
-
-                status.configure(
-                    text="Minimum stock cannot be negative.",
+                    text=error,
                     text_color="red"
                 )
 
@@ -988,607 +977,6 @@ class ProductsPage(ctk.CTkScrollableFrame):
             f"Barcode: {result}"
         )
 
-    # ==========================================================
-    # GENERATE BARCODE LABEL
-    # ==========================================================
-
-    def generate_barcode_label(
-        self,
-        product_id,
-        product_name,
-        selling_price,
-        product_barcode
-        ):
-
-        # ------------------------------------------------------
-        # Validate barcode
-        # ------------------------------------------------------
-
-        if (
-            not product_barcode
-            or product_barcode == "—"
-        ):
-
-            messagebox.showwarning(
-                "No Barcode",
-                "This product does not have a barcode."
-            )
-
-            return
-
-        # ------------------------------------------------------
-        # Create output directory
-        # ------------------------------------------------------
-
-        labels_dir = "barcode_labels"
-
-        os.makedirs(
-            labels_dir,
-            exist_ok=True
-        )
-
-        # ------------------------------------------------------
-        # Temporary barcode filename
-        # ------------------------------------------------------
-
-        barcode_base = os.path.join(
-            labels_dir,
-            f"barcode_{product_id}"
-        )
-
-        # ------------------------------------------------------
-        # Generate Code 128 barcode
-        # ------------------------------------------------------
-
-        code = barcode.get(
-            "code128",
-            str(product_barcode),
-            writer=ImageWriter()
-        )
-
-        barcode_file = code.save(
-            barcode_base
-        )
-
-        # python-barcode returns the actual PNG path
-        barcode_file = f"{barcode_base}.png"
-
-        # ------------------------------------------------------
-        # Open barcode image
-        # ------------------------------------------------------
-
-        barcode_image = Image.open(
-            barcode_file
-        ).convert("RGB")
-
-        # ------------------------------------------------------
-        # Label dimensions
-        # ------------------------------------------------------
-
-        label_width = 700
-        label_height = 430
-
-        label = Image.new(
-            "RGB",
-            (
-                label_width,
-                label_height
-            ),
-            "white"
-        )
-
-        draw = ImageDraw.Draw(
-            label
-        )
-
-        # ------------------------------------------------------
-        # Fonts
-        # ------------------------------------------------------
-
-        try:
-
-            title_font = ImageFont.truetype(
-                "DejaVuSans-Bold.ttf",
-                34
-            )
-
-            product_font = ImageFont.truetype(
-                "DejaVuSans-Bold.ttf",
-                30
-            )
-
-            price_font = ImageFont.truetype(
-                "DejaVuSans-Bold.ttf",
-                28
-            )
-
-            barcode_font = ImageFont.truetype(
-                "DejaVuSans.ttf",
-                22
-            )
-
-        except Exception:
-
-            title_font = ImageFont.load_default()
-            product_font = ImageFont.load_default()
-            price_font = ImageFont.load_default()
-            barcode_font = ImageFont.load_default()
-
-        # ------------------------------------------------------
-        # Border
-        # ------------------------------------------------------
-
-        draw.rounded_rectangle(
-            (5, 5, label_width - 5, label_height - 5),
-            radius=20,
-            outline="#065F46",
-            width=4
-        )
-
-        # ------------------------------------------------------
-        # Store Name
-        # ------------------------------------------------------
-
-        store_text = "SHINGVI SUPERMART"
-
-        store_box = draw.textbbox(
-            (0, 0),
-            store_text,
-            font=title_font
-        )
-
-        store_width = (
-            store_box[2] - store_box[0]
-        )
-
-        draw.text(
-            (
-                (label_width - store_width) / 2,
-                25
-            ),
-            store_text,
-            font=title_font,
-            fill="#065F46"
-        )
-
-        # ------------------------------------------------------
-        # Product Name
-        # ------------------------------------------------------
-
-        product_text = product_name.title()
-
-        product_box = draw.textbbox(
-            (0, 0),
-            product_text,
-            font=product_font
-        )
-
-        product_width = (
-            product_box[2] - product_box[0]
-        )
-
-        draw.text(
-            (
-                (label_width - product_width) / 2,
-                85
-            ),
-            product_text,
-            font=product_font,
-            fill="#111827"
-        )
-
-        # ------------------------------------------------------
-        # Price
-        # ------------------------------------------------------
-
-        price_text = f"₹{float(selling_price):,.2f}"
-
-        price_box = draw.textbbox(
-            (0, 0),
-            price_text,
-            font=price_font
-        )
-
-        price_width = (
-            price_box[2] - price_box[0]
-        )
-
-        draw.text(
-            (
-                (label_width - price_width) / 2,
-                135
-            ),
-            price_text,
-            font=price_font,
-            fill="#16A34A"
-        )
-
-        # ------------------------------------------------------
-        # Resize barcode
-        # ------------------------------------------------------
-
-        barcode_image.thumbnail(
-            (
-                600,
-                150
-            )
-        )
-
-        barcode_x = (
-            label_width - barcode_image.width
-        ) // 2
-
-        barcode_y = 190
-
-        label.paste(
-            barcode_image,
-            (
-                barcode_x,
-                barcode_y
-            )
-        )
-
-        # ------------------------------------------------------
-        # Barcode Number
-        # ------------------------------------------------------
-
-        barcode_text = str(
-            product_barcode
-        )
-
-        barcode_box = draw.textbbox(
-            (0, 0),
-            barcode_text,
-            font=barcode_font
-        )
-
-        barcode_width = (
-            barcode_box[2] - barcode_box[0]
-        )
-
-        draw.text(
-            (
-                (label_width - barcode_width) / 2,
-                355
-            ),
-            barcode_text,
-            font=barcode_font,
-            fill="#111827"
-        )
-
-        # ------------------------------------------------------
-        # Footer
-        # ------------------------------------------------------
-
-        footer_text = "Internal POS Barcode"
-
-        footer_box = draw.textbbox(
-            (0, 0),
-            footer_text,
-            font=barcode_font
-        )
-
-        footer_width = (
-            footer_box[2] - footer_box[0]
-        )
-
-        draw.text(
-            (
-                (label_width - footer_width) / 2,
-                390
-            ),
-            footer_text,
-            font=barcode_font,
-            fill="#64748B"
-        )
-
-        # ------------------------------------------------------
-        # Save final label
-        # ------------------------------------------------------
-
-        label_path = os.path.join(
-            labels_dir,
-            f"label_{product_id}.png"
-        )
-
-        label.save(
-            label_path,
-            "PNG"
-        )
-
-        return label_path
-
-
-    # ==========================================================
-    # GENERATE BARCODE LABEL PDF
-    # ==========================================================
-
-    def generate_barcode_label_pdf(
-        self,
-        product_id,
-        product_name,
-        selling_price,
-        product_barcode
-    ):
-
-        if (
-            not product_barcode
-            or product_barcode == "—"
-        ):
-
-            messagebox.showwarning(
-                "No Barcode",
-                "This product does not have a barcode."
-            )
-
-            return None
-
-        # ------------------------------------------------------
-        # Generate PNG label first
-        # ------------------------------------------------------
-
-        label_path = self.generate_barcode_label(
-            product_id,
-            product_name,
-            selling_price,
-            product_barcode
-        )
-
-        if not label_path:
-            return None
-
-        # ------------------------------------------------------
-        # PDF output directory
-        # ------------------------------------------------------
-
-        labels_dir = "barcode_labels"
-
-        os.makedirs(
-            labels_dir,
-            exist_ok=True
-        )
-
-        pdf_path = os.path.join(
-            labels_dir,
-            f"label_{product_id}.pdf"
-        )
-
-        # ------------------------------------------------------
-        # Create A4 PDF
-        # ------------------------------------------------------
-
-        pdf = canvas.Canvas(
-            pdf_path,
-            pagesize=A4
-        )
-
-        page_width, page_height = A4
-
-        # ------------------------------------------------------
-        # Label dimensions on PDF
-        # ------------------------------------------------------
-
-        label_width = 500
-        label_height = 310
-
-        x = (
-            page_width - label_width
-        ) / 2
-
-        y = (
-            page_height - label_height
-        ) / 2
-
-        # ------------------------------------------------------
-        # Draw label image
-        # ------------------------------------------------------
-
-        pdf.drawImage(
-            ImageReader(label_path),
-            x,
-            y,
-            width=label_width,
-            height=label_height,
-            preserveAspectRatio=True,
-            mask="auto"
-        )
-
-        pdf.showPage()
-        pdf.save()
-
-        return pdf_path
-    # ==========================================================
-    # PREVIEW BARCODE LABEL
-    # ==========================================================
-
-    def preview_barcode_label(
-        self,
-        product_id,
-        product_name,
-        selling_price,
-        barcode_value
-    ):
-
-        label_path = self.generate_barcode_label(
-            product_id,
-            product_name,
-            selling_price,
-            barcode_value
-        )
-
-        if not label_path:
-            return
-
-        preview = ctk.CTkToplevel(self)
-
-        preview.title(
-            "Barcode Label Preview"
-        )
-
-        preview.geometry(
-            "820x650"
-        )
-
-        preview.minsize(
-            820,
-            650
-        )
-
-        preview.grab_set()
-
-        preview.configure(
-            fg_color="#F9FAFB"
-        )
-
-        # ------------------------------------------------------
-        # Title
-        # ------------------------------------------------------
-
-        ctk.CTkLabel(
-            preview,
-            text="🖨 Barcode Label Preview",
-            font=("Poppins", 24, "bold"),
-            text_color="#065F46"
-        ).pack(
-            pady=(20, 5)
-        )
-
-        ctk.CTkLabel(
-            preview,
-            text=product_name.title(),
-            font=("Poppins", 14),
-            text_color="#64748B"
-        ).pack(
-            pady=(0, 15)
-        )
-
-        # ------------------------------------------------------
-        # Load image
-        # ------------------------------------------------------
-
-        preview_image = Image.open(
-            label_path
-        )
-
-        preview_image.thumbnail(
-            (
-                700,
-                430
-            )
-        )
-
-        ctk_image = ctk.CTkImage(
-            light_image=preview_image,
-            dark_image=preview_image,
-            size=(
-                preview_image.width,
-                preview_image.height
-            )
-        )
-
-        image_label = ctk.CTkLabel(
-            preview,
-            text="",
-            image=ctk_image
-        )
-
-        image_label.pack(
-            pady=10
-        )
-
-        # ------------------------------------------------------
-        # Buttons
-        # ------------------------------------------------------
-
-        button_frame = ctk.CTkFrame(
-            preview,
-            fg_color="transparent"
-        )
-
-        button_frame.pack(
-            fill="x",
-            padx=30,
-            pady=15
-        )
-
-
-        ctk.CTkButton(
-            button_frame,
-            text="📄 Save PDF",
-            height=42,
-            fg_color="#0F766E",
-            hover_color="#115E59",
-            command=lambda: self._save_label_pdf_from_preview(
-                product_id,
-                product_name,
-                selling_price,
-                barcode_value,
-                preview
-            )
-        ).pack(
-            side="left",
-            expand=True,
-            padx=5
-        )
-
-        ctk.CTkButton(
-            button_frame,
-            text="📁 Open Label Folder",
-            height=42,
-            fg_color="#2563EB",
-            hover_color="#1D4ED8",
-            command=lambda: os.system(
-                f'xdg-open "{os.path.dirname(label_path)}"'
-            )
-        ).pack(
-            side="left",
-            expand=True,
-            padx=5
-        )
-
-        ctk.CTkButton(
-            button_frame,
-            text="Close",
-            height=42,
-            fg_color="#6B7280",
-            hover_color="#4B5563",
-            command=preview.destroy
-        ).pack(
-            side="left",
-            expand=True,
-            padx=5
-        )
-
-
-    # ==========================================================
-    # SAVE LABEL PDF FROM PREVIEW
-    # ==========================================================
-
-    def _save_label_pdf_from_preview(
-        self,
-        product_id,
-        product_name,
-        selling_price,
-        barcode_value,
-        preview
-    ):
-
-        pdf_path = self.generate_barcode_label_pdf(
-            product_id,
-            product_name,
-            selling_price,
-            barcode_value
-        )
-
-        if not pdf_path:
-            return
-
-        messagebox.showinfo(
-            "PDF Created",
-            f"Barcode label PDF created successfully!\n\n"
-            f"{pdf_path}",
-            parent=preview
-        )
     # ==========================================================
     # BARCODE DETAILS POPUP
     # ==========================================================
@@ -2067,39 +1455,11 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
         # ======================================================
-        # FIELD HELPER
-        # ======================================================
-
-        def create_field(label_text, variable):
-
-            ctk.CTkLabel(
-                form_frame,
-                text=label_text,
-                font=("Poppins", 13, "bold")
-            ).pack(
-                anchor="w",
-                padx=20,
-                pady=(6, 2)
-            )
-
-            entry = ctk.CTkEntry(
-                form_frame,
-                textvariable=variable,
-                width=430,
-                height=36
-            )
-
-            entry.pack(
-                padx=20
-            )
-
-            return entry
-
-        # ======================================================
         # PRODUCT NAME
         # ======================================================
 
-        create_field(
+        self.create_product_field(
+            form_frame,
             "Product Name",
             name_var
         )
@@ -2120,15 +1480,7 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         category_combo = ctk.CTkComboBox(
             form_frame,
-            values=[
-                "Oil",
-                "Grocery",
-                "Snacks",
-                "Beverages",
-                "Household",
-                "Personal Care",
-                "Clothing"
-            ],
+            values=self.PRODUCT_CATEGORIES,
             variable=category_var,
             width=430,
             height=36
@@ -2142,30 +1494,36 @@ class ProductsPage(ctk.CTkScrollableFrame):
         # OTHER FIELDS
         # ======================================================
 
-        create_field(
+        self.create_product_field(
+            form_frame,
             "Purchase Price",
             purchase_var
         )
 
-        create_field(
+        self.create_product_field(
+            form_frame,
             "Selling Price",
             selling_var
         )
 
-        create_field(
+        self.create_product_field(
+            form_frame,
             "Stock Quantity",
             stock_var
         )
 
-        create_field(
+        self.create_product_field(
+            form_frame,
             "Minimum Stock",
             minimum_var
         )
 
-        create_field(
+        self.create_product_field(
+            form_frame,
             "Barcode",
             barcode_var
         )
+
 
         ctk.CTkLabel(
             form_frame,
@@ -2250,28 +1608,20 @@ class ProductsPage(ctk.CTkScrollableFrame):
                 )
                 return
 
-            if purchase_price <= 0:
+            error = self.validate_product_values(
+                purchase_price,
+                selling_price,
+                stock,
+                minimum_stock
+            )
+
+            if error:
 
                 status_label.configure(
-                    text="Purchase price must be greater than 0.",
+                    text=error,
                     text_color="red"
                 )
-                return
 
-            if selling_price <= 0:
-
-                status_label.configure(
-                    text="Selling price must be greater than 0.",
-                    text_color="red"
-                )
-                return
-
-            if stock < 0 or minimum_stock < 0:
-
-                status_label.configure(
-                    text="Stock values cannot be negative.",
-                    text_color="red"
-                )
                 return
 
             # ---------------- Barcode ----------------
@@ -2333,7 +1683,11 @@ class ProductsPage(ctk.CTkScrollableFrame):
     # ADD STOCK / PURCHASE POPUP
     # ==========================================================
 
-    def open_add_stock_popup(self):
+    def open_add_stock_popup(
+            self,
+            preset_quantity=None,
+            preset_purchase_price=None
+    ):
 
         selected = self.table.selection()
 
@@ -2507,7 +1861,13 @@ class ProductsPage(ctk.CTkScrollableFrame):
             pady=(5, 4)
         )
 
-        quantity_var = ctk.StringVar()
+        quantity_var = ctk.StringVar(
+            value=(
+                str(preset_quantity)
+                if preset_quantity is not None
+                else ""
+            )
+        )
 
         quantity_entry = ctk.CTkEntry(
             content,
@@ -2537,7 +1897,13 @@ class ProductsPage(ctk.CTkScrollableFrame):
             pady=(5, 4)
         )
 
-        purchase_price_var = ctk.StringVar()
+        purchase_price_var = ctk.StringVar(
+            value=(
+                f"{preset_purchase_price:.2f}"
+                if preset_purchase_price is not None
+                else ""
+            )
+        )
 
         purchase_price_entry = ctk.CTkEntry(
             content,
@@ -2635,6 +2001,12 @@ class ProductsPage(ctk.CTkScrollableFrame):
             update_total
         )
 
+        if (
+            preset_quantity is not None
+            and preset_purchase_price is not None
+        ):
+            update_total()
+            
         # ======================================================
         # FIXED BUTTON AREA
         # ======================================================
@@ -2822,29 +2194,28 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
         # ------------------------------------------------------
-        # Get product's minimum stock and purchase price
+        # Find product in low-stock list
         # ------------------------------------------------------
 
         low_stock_products = (
             get_low_stock_products_for_reorder()
         )
 
-        product_info = None
-
-        for product in low_stock_products:
-
-            if int(product[0]) == product_id:
-
-                product_info = product
-
-                break
+        product_info = next(
+            (
+                product
+                for product in low_stock_products
+                if int(product[0]) == product_id
+            ),
+            None
+        )
 
         if not product_info:
 
             messagebox.showinfo(
                 "Stock Level Healthy",
                 f"{product_name.title()} is not currently "
-                f"below its minimum stock level."
+                f"at or below its minimum stock level."
             )
 
             return
@@ -2868,13 +2239,6 @@ class ProductsPage(ctk.CTkScrollableFrame):
         # ------------------------------------------------------
         # Suggested reorder quantity
         # ------------------------------------------------------
-        #
-        # Bring stock back to at least 2 × minimum stock.
-        # Example:
-        # Stock = 8
-        # Minimum = 10
-        # Suggested = 12
-        #
 
         suggested_quantity = max(
             (minimum_stock * 2) - current_stock,
@@ -2882,458 +2246,13 @@ class ProductsPage(ctk.CTkScrollableFrame):
         )
 
         # ------------------------------------------------------
-        # Popup
+        # Open the existing Stock In / Purchase workflow
         # ------------------------------------------------------
 
-        popup = ctk.CTkToplevel(
-            self
+        self.open_add_stock_popup(
+            preset_quantity=suggested_quantity,
+            preset_purchase_price=purchase_price
         )
-
-        popup.title(
-            "Reorder Product"
-        )
-
-        popup.geometry(
-            "480x620"
-        )
-
-        popup.minsize(
-            480,
-            620
-        )
-
-        popup.maxsize(
-            480,
-            620
-        )
-
-        popup.resizable(
-            False,
-            False
-        )
-
-        popup.grab_set()
-
-        popup.configure(
-            fg_color="white"
-        )
-
-        # ------------------------------------------------------
-        # Header
-        # ------------------------------------------------------
-
-        ctk.CTkLabel(
-            popup,
-            text="🔄 Reorder Product",
-            font=("Poppins", 23, "bold"),
-            text_color="#D97706"
-        ).pack(
-            pady=(20, 5)
-        )
-
-        ctk.CTkLabel(
-            popup,
-            text=product_name.title(),
-            font=("Poppins", 15, "bold"),
-            text_color="#374151"
-        ).pack(
-            pady=(0, 5)
-        )
-
-        ctk.CTkLabel(
-            popup,
-            text=(
-                f"Current Stock: {current_stock}   •   "
-                f"Minimum: {minimum_stock}"
-            ),
-            font=("Poppins", 12),
-            text_color="#64748B"
-        ).pack(
-            pady=(0, 15)
-        )
-
-        # ------------------------------------------------------
-        # Form
-        # ------------------------------------------------------
-
-        content = ctk.CTkScrollableFrame(
-            popup,
-            fg_color="transparent"
-        )
-
-        content.pack(
-            fill="both",
-            expand=True,
-            padx=15,
-            pady=(0, 5)
-        )
-
-        # ------------------------------------------------------
-        # Supplier
-        # ------------------------------------------------------
-
-        ctk.CTkLabel(
-            content,
-            text="Supplier",
-            font=("Poppins", 13, "bold"),
-            text_color="#374151"
-        ).pack(
-            anchor="w",
-            padx=20,
-            pady=(8, 4)
-        )
-
-        suppliers = get_all_suppliers()
-
-        supplier_map = {
-            f"{supplier[0]} - {supplier[1]}": supplier[0]
-            for supplier in suppliers
-        }
-
-        supplier_names = list(
-            supplier_map.keys()
-        )
-
-        supplier_var = ctk.StringVar()
-
-        supplier_combo = ctk.CTkComboBox(
-            content,
-            values=(
-                supplier_names
-                if supplier_names
-                else ["No suppliers available"]
-            ),
-            variable=supplier_var,
-            height=40,
-            state="readonly"
-        )
-
-        supplier_combo.pack(
-            fill="x",
-            padx=20,
-            pady=(0, 10)
-        )
-
-        if supplier_names:
-
-            supplier_combo.set(
-                supplier_names[0]
-            )
-
-        # ------------------------------------------------------
-        # Quantity
-        # ------------------------------------------------------
-
-        ctk.CTkLabel(
-            content,
-            text="Reorder Quantity",
-            font=("Poppins", 13, "bold"),
-            text_color="#374151"
-        ).pack(
-            anchor="w",
-            padx=20,
-            pady=(5, 4)
-        )
-
-        quantity_var = ctk.StringVar(
-            value=str(
-                suggested_quantity
-            )
-        )
-
-        quantity_entry = ctk.CTkEntry(
-            content,
-            textvariable=quantity_var,
-            height=40
-        )
-
-        quantity_entry.pack(
-            fill="x",
-            padx=20,
-            pady=(0, 10)
-        )
-
-        # ------------------------------------------------------
-        # Purchase Price
-        # ------------------------------------------------------
-
-        ctk.CTkLabel(
-            content,
-            text="Purchase Price / Unit",
-            font=("Poppins", 13, "bold"),
-            text_color="#374151"
-        ).pack(
-            anchor="w",
-            padx=20,
-            pady=(5, 4)
-        )
-
-        purchase_price_var = ctk.StringVar(
-            value=f"{purchase_price:.2f}"
-        )
-
-        purchase_price_entry = ctk.CTkEntry(
-            content,
-            textvariable=purchase_price_var,
-            height=40
-        )
-
-        purchase_price_entry.pack(
-            fill="x",
-            padx=20,
-            pady=(0, 10)
-        )
-
-        # ------------------------------------------------------
-        # Total Cost
-        # ------------------------------------------------------
-
-        total_var = ctk.StringVar(
-            value=(
-                f"Estimated Purchase Cost: "
-                f"₹{suggested_quantity * purchase_price:,.2f}"
-            )
-        )
-
-        ctk.CTkLabel(
-            content,
-            textvariable=total_var,
-            font=("Poppins", 16, "bold"),
-            text_color="#D97706"
-        ).pack(
-            anchor="w",
-            padx=20,
-            pady=(10, 5)
-        )
-
-        ctk.CTkLabel(
-            content,
-            text=(
-                f"Suggested quantity restores stock "
-                f"to about {minimum_stock * 2} units."
-            ),
-            font=("Poppins", 10),
-            text_color="#64748B"
-        ).pack(
-            anchor="w",
-            padx=20,
-            pady=(0, 15)
-        )
-
-        # ------------------------------------------------------
-        # Live cost update
-        # ------------------------------------------------------
-
-        def update_total(event=None):
-
-            try:
-
-                quantity = int(
-                    quantity_var.get().strip()
-                )
-
-                price = float(
-                    purchase_price_var.get().strip()
-                )
-
-                if quantity <= 0 or price < 0:
-                    raise ValueError
-
-                total = quantity * price
-
-                total_var.set(
-                    f"Estimated Purchase Cost: "
-                    f"₹{total:,.2f}"
-                )
-
-            except ValueError:
-
-                total_var.set(
-                    "Estimated Purchase Cost: ₹0.00"
-                )
-
-        quantity_entry.bind(
-            "<KeyRelease>",
-            update_total
-        )
-
-        purchase_price_entry.bind(
-            "<KeyRelease>",
-            update_total
-        )
-
-        # ------------------------------------------------------
-        # Save reorder
-        # ------------------------------------------------------
-
-        def process_reorder():
-
-            if not supplier_names:
-
-                messagebox.showwarning(
-                    "No Supplier",
-                    "Please create a supplier first.",
-                    parent=popup
-                )
-
-                return
-
-            selected_supplier = (
-                supplier_var.get().strip()
-            )
-
-            supplier_id = supplier_map.get(
-                selected_supplier
-            )
-
-            if not supplier_id:
-
-                messagebox.showwarning(
-                    "No Supplier Selected",
-                    "Please select a supplier.",
-                    parent=popup
-                )
-
-                return
-
-            try:
-
-                quantity = int(
-                    quantity_var.get().strip()
-                )
-
-                price = float(
-                    purchase_price_var.get().strip()
-                )
-
-            except ValueError:
-
-                messagebox.showerror(
-                    "Invalid Input",
-                    "Enter a valid quantity and purchase price.",
-                    parent=popup
-                )
-
-                return
-
-            if quantity <= 0:
-
-                messagebox.showerror(
-                    "Invalid Quantity",
-                    "Quantity must be greater than zero.",
-                    parent=popup
-                )
-
-                return
-
-            if price < 0:
-
-                messagebox.showerror(
-                    "Invalid Price",
-                    "Purchase price cannot be negative.",
-                    parent=popup
-                )
-
-                return
-
-            total_cost = quantity * price
-
-            confirm = messagebox.askyesno(
-                "Confirm Reorder",
-                f"Product: {product_name.title()}\n"
-                f"Supplier: {selected_supplier}\n"
-                f"Quantity: {quantity}\n"
-                f"Purchase Price: ₹{price:,.2f}\n"
-                f"Total Cost: ₹{total_cost:,.2f}\n\n"
-                f"Create this purchase?",
-                parent=popup
-            )
-
-            if not confirm:
-                return
-
-            try:
-
-                result = add_stock(
-                    product_id,
-                    quantity,
-                    supplier_id,
-                    price
-                )
-
-            except Exception as error:
-
-                messagebox.showerror(
-                    "Reorder Failed",
-                    str(error),
-                    parent=popup
-                )
-
-                return
-
-            if not result.get("success"):
-
-                messagebox.showerror(
-                    "Reorder Failed",
-                    "Unable to complete the reorder.",
-                    parent=popup
-                )
-
-                return
-
-            popup.destroy()
-
-            self.load_products()
-
-            messagebox.showinfo(
-                "Reorder Successful",
-                f"{product_name.title()} reordered successfully.\n\n"
-                f"Quantity Added: {quantity}\n"
-                f"New Stock: {result['new_stock']}\n"
-                f"Purchase Cost: ₹{result['total_cost']:,.2f}"
-            )
-
-        # ------------------------------------------------------
-        # Buttons
-        # ------------------------------------------------------
-
-        button_frame = ctk.CTkFrame(
-            popup,
-            fg_color="white"
-        )
-
-        button_frame.pack(
-            fill="x",
-            padx=20,
-            pady=(0, 10)
-        )
-
-        ctk.CTkButton(
-            button_frame,
-            text="🔄 Create Reorder",
-            height=42,
-            fg_color="#F59E0B",
-            hover_color="#D97706",
-            font=("Poppins", 13, "bold"),
-            command=process_reorder
-        ).pack(
-            fill="x",
-            pady=3
-        )
-
-        ctk.CTkButton(
-            button_frame,
-            text="Cancel",
-            height=42,
-            fg_color="#6B7280",
-            hover_color="#4B5563",
-            command=popup.destroy
-        ).pack(
-            fill="x",
-            pady=3
-        )
-
-        quantity_entry.focus_set()
         
     # ==========================================================
     # DELETE PRODUCT POPUP
@@ -3363,19 +2282,28 @@ class ProductsPage(ctk.CTkScrollableFrame):
         if not answer:
             return
 
-        deleted = delete_product(product_id)
+        try:
+
+            deleted = delete_product(
+                product_id
+            )
+
+        except Exception as error:
+
+            messagebox.showerror(
+                "Cannot Delete Product",
+                str(error)
+            )
+
+            return
 
         if deleted:
+
             self.load_products()
 
             messagebox.showinfo(
                 "Deleted",
                 f"{product_name.title()} deleted successfully!"
-            )
-        else:
-            messagebox.showerror(
-                "Error",
-                "Unable to delete the selected product."
             )
 
     # ==========================================================
@@ -3386,446 +2314,17 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
         keyword = self.search_entry.get().strip().lower()
 
-        # --------------------------------------------------
-        # Empty search → restore all products
-        # --------------------------------------------------
-
-        if keyword == "":
+        if not keyword:
             self.load_products()
             return
 
-        # --------------------------------------------------
-        # Search backend
-        # --------------------------------------------------
-
         products = search_products(keyword)
-
-        # --------------------------------------------------
-        # Clear current table
-        # --------------------------------------------------
-
-        for row in self.table.get_children():
-            self.table.delete(row)
-
-        # --------------------------------------------------
-        # Update result count
-        # --------------------------------------------------
 
         self.count_label.configure(
             text=f"{len(products)} Products Found"
         )
 
-        # --------------------------------------------------
-        # Insert search results
-        # --------------------------------------------------
-
-        for (
-            product_id,
-            name,
-            category,
-            selling_price,
-            stock,
-            barcode
-        ) in products:
-
-            self.table.insert(
-                "",
-                "end",
-                values=(
-                    product_id,
-                    name.title(),
-                    category.title() if category else "",
-                    f"₹{float(selling_price):,.2f}",
-                    stock,
-                    barcode or "—"
-                )
-            )
-
-    # ==========================================================
-    # LABEL GENERATOR POPUP
-    # ==========================================================
-
-    def open_label_generator(
-        self,
-        product_id,
-        product_name,
-        selling_price,
-        barcode_value
-    ):
-
-        if (
-            not barcode_value
-            or barcode_value == "—"
-        ):
-
-            messagebox.showwarning(
-                "No Barcode",
-                "Generate or assign a barcode first."
-            )
-
-            return
-
-        popup = ctk.CTkToplevel(self)
-
-        popup.title(
-            "Barcode Label Generator"
-        )
-
-        popup.geometry(
-            "460x560"
-        )
-
-        popup.minsize(
-            460,
-            560
-        )
-
-        popup.maxsize(
-            460,
-            560
-        )
-
-        popup.resizable(
-            False,
-            False
-        )
-
-        popup.grab_set()
-
-        popup.configure(
-            fg_color="white"
-        )
-
-        # ======================================================
-        # HEADER
-        # ======================================================
-
-        ctk.CTkLabel(
-            popup,
-            text="🖨 Barcode Label Generator",
-            font=("Poppins", 22, "bold"),
-            text_color="#065F46"
-        ).pack(
-            pady=(15, 5)
-        )
-
-        ctk.CTkLabel(
-            popup,
-            text=product_name.title(),
-            font=("Poppins", 14, "bold"),
-            text_color="#374151"
-        ).pack(
-            pady=(0, 8)
-        )
-
-        # ======================================================
-        # SCROLLABLE CONTENT
-        # ======================================================
-
-        content_frame = ctk.CTkScrollableFrame(
-            popup,
-            fg_color="transparent"
-        )
-
-        content_frame.pack(
-            fill="both",
-            expand=True,
-            padx=15,
-            pady=(0, 5)
-        )
-
-        # ======================================================
-        # PRODUCT INFORMATION CARD
-        # ======================================================
-
-        info_frame = ctk.CTkFrame(
-            content_frame,
-            fg_color="#F9FAFB",
-            corner_radius=16,
-            border_width=1,
-            border_color="#E5E7EB"
-        )
-
-        info_frame.pack(
-            fill="x",
-            padx=10,
-            pady=5
-        )
-
-        ctk.CTkLabel(
-            info_frame,
-            text=f"Barcode: {barcode_value}",
-            font=("Poppins", 12, "bold"),
-            text_color="#111827"
-        ).pack(
-            pady=(14, 5)
-        )
-
-        ctk.CTkLabel(
-            info_frame,
-            text=(
-                f"Selling Price: "
-                f"₹{float(selling_price):,.2f}"
-            ),
-            font=("Poppins", 11),
-            text_color="#64748B"
-        ).pack(
-            pady=(0, 5)
-        )
-
-        ctk.CTkLabel(
-            info_frame,
-            text="Barcode Type: Internal POS Barcode",
-            font=("Poppins", 10, "bold"),
-            text_color="#0F766E"
-        ).pack(
-            pady=(0, 14)
-        )
-
-        # ======================================================
-        # NUMBER OF LABELS
-        # ======================================================
-
-        ctk.CTkLabel(
-            content_frame,
-            text="Number of Labels",
-            font=("Poppins", 13, "bold"),
-            text_color="#374151"
-        ).pack(
-            anchor="w",
-            padx=20,
-            pady=(15, 5)
-        )
-
-        label_count_var = ctk.StringVar(
-            value="1"
-        )
-
-        label_count_entry = ctk.CTkEntry(
-            content_frame,
-            textvariable=label_count_var,
-            width=140,
-            height=40,
-            justify="center",
-            font=("Poppins", 14, "bold")
-        )
-
-        label_count_entry.pack()
-
-        label_count_entry.select_range(
-            0,
-            "end"
-        )
-
-        # ======================================================
-        # OPTIONAL NOTE
-        # ======================================================
-
-        ctk.CTkLabel(
-            content_frame,
-            text=(
-                "Tip: You can generate up to "
-                "500 labels at once."
-            ),
-            font=("Poppins", 10),
-            text_color="#64748B"
-        ).pack(
-            pady=(10, 20)
-        )
-
-        # ======================================================
-        # STATUS
-        # ======================================================
-
-        status_label = ctk.CTkLabel(
-            popup,
-            text="",
-            font=("Poppins", 10, "bold")
-        )
-
-        status_label.pack(
-            pady=(0, 5)
-        )
-
-        # ======================================================
-        # FIXED BUTTON AREA
-        # ======================================================
-
-        button_frame = ctk.CTkFrame(
-            popup,
-            fg_color="white"
-        )
-
-        button_frame.pack(
-            fill="x",
-            padx=20,
-            pady=(0, 10)
-        )
-
-        # ======================================================
-        # GENERATE MULTIPLE LABELS
-        # ======================================================
-
-        def generate_multiple_labels():
-
-            try:
-
-                count = int(
-                    label_count_var.get().strip()
-                )
-
-            except ValueError:
-
-                status_label.configure(
-                    text="Enter a valid whole number.",
-                    text_color="red"
-                )
-
-                return
-
-            if count <= 0:
-
-                status_label.configure(
-                    text="Number of labels must be at least 1.",
-                    text_color="red"
-                )
-
-                return
-
-            if count > 500:
-
-                status_label.configure(
-                    text="Maximum 500 labels at once.",
-                    text_color="red"
-                )
-
-                return
-
-            try:
-
-                pdf_path = (
-                    self.generate_multiple_barcode_labels(
-                        product_id,
-                        product_name,
-                        selling_price,
-                        barcode_value,
-                        count
-                    )
-                )
-
-            except Exception as error:
-
-                status_label.configure(
-                    text=f"Generation failed: {error}",
-                    text_color="red"
-                )
-
-                return
-
-            if not pdf_path:
-
-                status_label.configure(
-                    text="Unable to create the PDF.",
-                    text_color="red"
-                )
-
-                return
-
-            status_label.configure(
-                text=f"✅ {count} label(s) created successfully.",
-                text_color="#15803D"
-            )
-
-            messagebox.showinfo(
-                "Labels Generated",
-                f"{count} barcode label(s) generated successfully!\n\n"
-                f"{pdf_path}",
-                parent=popup
-            )
-
-
-        # ======================================================
-        # OPEN FOLDER
-        # ======================================================
-
-        def open_label_folder():
-
-            labels_dir = os.path.abspath(
-                "barcode_labels"
-            )
-
-            os.makedirs(
-                labels_dir,
-                exist_ok=True
-            )
-
-            try:
-
-                os.system(
-                    f'xdg-open "{labels_dir}"'
-                )
-
-            except Exception as error:
-
-                messagebox.showerror(
-                    "Unable to Open Folder",
-                    str(error),
-                    parent=popup
-                )
-
-        # ======================================================
-        # GENERATE PDF BUTTON
-        # ======================================================
-
-        ctk.CTkButton(
-            button_frame,
-            text="📄 Generate PDF",
-            height=40,
-            fg_color="#0F766E",
-            hover_color="#115E59",
-            font=("Poppins", 13, "bold"),
-            command=generate_multiple_labels
-        ).pack(
-            fill="x",
-            pady=3
-        )
-
-        # ======================================================
-        # OPEN FOLDER BUTTON
-        # ======================================================
-
-        ctk.CTkButton(
-            button_frame,
-            text="📁 Open Label Folder",
-            height=40,
-            fg_color="#2563EB",
-            hover_color="#1D4ED8",
-            font=("Poppins", 13, "bold"),
-            command=open_label_folder
-        ).pack(
-            fill="x",
-            pady=3
-        )
-
-        # ======================================================
-        # CANCEL
-        # ======================================================
-
-        ctk.CTkButton(
-            button_frame,
-            text="Cancel",
-            height=40,
-            fg_color="#6B7280",
-            hover_color="#4B5563",
-            font=("Poppins", 13, "bold"),
-            command=popup.destroy
-        ).pack(
-            fill="x",
-            pady=3
-        )
-
-        label_count_entry.focus_set()
-
+        self.populate_product_table(products)
 
         # ==========================================================
         # GENERATE BARCODE PNG
@@ -3834,7 +2333,6 @@ class ProductsPage(ctk.CTkScrollableFrame):
     def generate_barcode_png(
             self,
             product_id,
-            product_name,
             barcode_value
         ):
 
@@ -3852,15 +2350,15 @@ class ProductsPage(ctk.CTkScrollableFrame):
             # Output directory
             # ------------------------------------------------------
 
-            output_dir = "barcode_images"
+            OUTPUT_DIR = self.BARCODE_IMAGES_DIR
 
             os.makedirs(
-                output_dir,
+                OUTPUT_DIR,
                 exist_ok=True
             )
 
             output_base = os.path.join(
-                output_dir,
+                OUTPUT_DIR,
                 f"barcode_{product_id}"
             )
 
@@ -3905,7 +2403,6 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
             png_path = self.generate_barcode_png(
                 product_id,
-                product_name,
                 barcode_value
             )
 
@@ -4031,17 +2528,15 @@ class ProductsPage(ctk.CTkScrollableFrame):
 
             def open_folder():
 
-                folder = os.path.abspath(
-                    "barcode_images"
-                )
+                folder = self.BARCODE_IMAGES_DIR
 
                 os.makedirs(
                     folder,
                     exist_ok=True
                 )
 
-                os.system(
-                    f'xdg-open "{folder}"'
+                subprocess.Popen(
+                    ["xdg-open", folder]
                 )
 
             ctk.CTkButton(
@@ -4069,275 +2564,30 @@ class ProductsPage(ctk.CTkScrollableFrame):
                 expand=True,
                 padx=5
             )
-    # ==========================================================
-    # GENERATE MULTIPLE BARCODE LABELS
-    # ==========================================================
 
-    def generate_multiple_barcode_labels(
-        self,
-        product_id,
-        product_name,
-        selling_price,
-        barcode_value,
-        label_count
-    ):
+    def populate_product_table(self, products):
 
-        from reportlab.pdfgen import canvas
-        from reportlab.lib.pagesizes import A4
-        from reportlab.graphics.barcode import code128
-        from reportlab.graphics import renderPDF
+        for row in self.table.get_children():
+            self.table.delete(row)
 
-        if not barcode_value or barcode_value == "—":
-            return None
+        for (
+            product_id,
+            name,
+            category,
+            selling_price,
+            stock,
+            barcode
+        ) in products:
 
-        # ------------------------------------------------------
-        # Output directory
-        # ------------------------------------------------------
-
-        labels_dir = "barcode_labels"
-
-        os.makedirs(
-            labels_dir,
-            exist_ok=True
-        )
-
-        # ------------------------------------------------------
-        # PDF path
-        # ------------------------------------------------------
-
-        pdf_path = os.path.join(
-            labels_dir,
-            f"labels_{product_id}_{label_count}.pdf"
-        )
-
-        pdf = canvas.Canvas(
-            pdf_path,
-            pagesize=A4
-        )
-
-        page_width, page_height = A4
-
-        # ======================================================
-        # LABEL GRID
-        # ======================================================
-
-        margin_x = 25
-        margin_y = 28
-
-        label_width = 270
-        label_height = 175
-
-        gap_x = 12
-        gap_y = 12
-
-        columns = 2
-        rows = 4
-
-        labels_per_page = columns * rows
-
-        # ======================================================
-        # BARCODE SETTINGS
-        # ======================================================
-
-        barcode_width = 220
-        barcode_height = 48
-
-        # ======================================================
-        # CREATE LABELS
-        # ======================================================
-
-        for index in range(label_count):
-
-            position = index % labels_per_page
-
-            if position == 0 and index != 0:
-                pdf.showPage()
-
-            row = position // columns
-            column = position % columns
-
-            x = (
-                margin_x
-                + column * (
-                    label_width + gap_x
+            self.table.insert(
+                "",
+                "end",
+                values=(
+                    product_id,
+                    name.title(),
+                    category.title() if category else "",
+                    f"₹{float(selling_price):,.2f}",
+                    stock,
+                    barcode or "—"
                 )
             )
-
-            y = (
-                page_height
-                - margin_y
-                - (row + 1) * label_height
-                - row * gap_y
-            )
-
-            # ==================================================
-            # BORDER
-            # ==================================================
-
-            pdf.setLineWidth(1.2)
-
-            pdf.setStrokeColorRGB(
-                0.025,
-                0.373,
-                0.275
-            )
-
-            pdf.roundRect(
-                x,
-                y,
-                label_width,
-                label_height,
-                8,
-                stroke=1,
-                fill=0
-            )
-
-            # ==================================================
-            # STORE NAME
-            # ==================================================
-
-            pdf.setFillColorRGB(
-                0.025,
-                0.373,
-                0.275
-            )
-
-            pdf.setFont(
-                "Helvetica-Bold",
-                11
-            )
-
-            pdf.drawCentredString(
-                x + label_width / 2,
-                y + label_height - 20,
-                "SHINGVI SUPERMART"
-            )
-
-            # ==================================================
-            # PRODUCT NAME
-            # ==================================================
-
-            pdf.setFillColorRGB(
-                0.067,
-                0.094,
-                0.153
-            )
-
-            pdf.setFont(
-                "Helvetica-Bold",
-                10
-            )
-
-            product_display = product_name.title()
-
-            if len(product_display) > 28:
-
-                product_display = (
-                    product_display[:25] + "..."
-                )
-
-            pdf.drawCentredString(
-                x + label_width / 2,
-                y + label_height - 38,
-                product_display
-            )
-
-            # ==================================================
-            # PRICE
-            # ==================================================
-
-            pdf.setFillColorRGB(
-                0.086,
-                0.639,
-                0.290
-            )
-
-            pdf.setFont(
-                "Helvetica-Bold",
-                10
-            )
-
-            pdf.drawCentredString(
-                x + label_width / 2,
-                y + label_height - 55,
-                f"₹{float(selling_price):,.2f}"
-            )
-
-            # ==================================================
-            # REAL VECTOR CODE 128 BARCODE
-            # ==================================================
-
-            barcode_value = str(barcode_value)
-
-            barcode_drawing = createBarcodeDrawing(
-                "Code128",
-                value=barcode_value,
-                barHeight=48,
-                barWidth=0.8,
-                humanReadable=False
-            )
-
-            # Center the vector barcode inside the label
-            barcode_x = (
-                x
-                + (label_width - barcode_drawing.width) / 2
-            )
-
-            barcode_y = y + 48
-
-            renderPDF.draw(
-                barcode_drawing,
-                pdf,
-                barcode_x,
-                barcode_y
-            )
-            # ==================================================
-            # BARCODE NUMBER
-            # ==================================================
-
-            pdf.setFillColorRGB(
-                0.067,
-                0.094,
-                0.153
-            )
-
-            pdf.setFont(
-                "Helvetica",
-                8
-            )
-
-            pdf.drawCentredString(
-                x + label_width / 2,
-                y + 27,
-                barcode_value
-            )
-
-            # ==================================================
-            # BARCODE TYPE
-            # ==================================================
-
-            pdf.setFillColorRGB(
-                0.39,
-                0.45,
-                0.50
-            )
-
-            pdf.setFont(
-                "Helvetica",
-                6.5
-            )
-
-            pdf.drawCentredString(
-                x + label_width / 2,
-                y + 12,
-                "Internal POS Barcode"
-            )
-
-        # ------------------------------------------------------
-        # Save
-        # ------------------------------------------------------
-
-        pdf.showPage()
-        pdf.save()
-
-        return pdf_path

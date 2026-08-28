@@ -1,52 +1,5 @@
 from database import get_connection
 
-def get_all_products():
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    query = """
-    SELECT product_id, name, category, selling_price, stock
-    FROM products
-    ORDER BY product_id;
-    """
-
-    cursor.execute(query)
-    products = cursor.fetchall()
-
-    cursor.close()
-    connection.close()
-
-    return products
-
-def add_product(name, category, purchase_price, selling_price, stock, minimum_stock):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    query = """
-    INSERT INTO products
-    (name, category, purchase_price, selling_price, stock, minimum_stock)
-    VALUES (%s, %s, %s, %s, %s, %s)
-    """
-
-    values = (
-        name,
-        category,
-        purchase_price,
-        selling_price,
-        stock,
-        minimum_stock
-    )
-
-    cursor.execute(query, values)
-
-    connection.commit()
-
-    cursor.close()
-    connection.close()
-
-    return True
-
 # ==========================================================
 # ADD PRODUCT WITH BARCODE
 # ==========================================================
@@ -61,16 +14,58 @@ def add_product_with_barcode(
     barcode
 ):
 
+    name = str(name).strip()
+    category = str(category).strip()
+    barcode = str(barcode or "").strip()
+
+    if not name:
+        raise ValueError(
+            "Product name is required."
+        )
+
+    if not category:
+        raise ValueError(
+            "Product category is required."
+        )
+
+    try:
+        purchase_price = float(purchase_price)
+        selling_price = float(selling_price)
+        stock = int(stock)
+        minimum_stock = int(minimum_stock)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "Invalid product values."
+        )
+
+    if purchase_price <= 0:
+        raise ValueError(
+            "Purchase price must be greater than zero."
+        )
+
+    if selling_price <= 0:
+        raise ValueError(
+            "Selling price must be greater than zero."
+        )
+
+    if stock < 0:
+        raise ValueError(
+            "Stock cannot be negative."
+        )
+
+    if minimum_stock < 0:
+        raise ValueError(
+            "Minimum stock cannot be negative."
+        )
+
     connection = get_connection()
     cursor = connection.cursor()
 
     try:
 
-        # ------------------------------------------
+        # --------------------------------------------------
         # Check duplicate barcode
-        # ------------------------------------------
-
-        barcode = barcode.strip()
+        # --------------------------------------------------
 
         if barcode:
 
@@ -83,22 +78,18 @@ def add_product_with_barcode(
                 (barcode,)
             )
 
-            existing = cursor.fetchone()
-
-            if existing:
-
+            if cursor.fetchone():
                 return False, (
                     "Barcode already belongs to another product."
                 )
 
-        # ------------------------------------------
+        # --------------------------------------------------
         # Insert product
-        # ------------------------------------------
+        # --------------------------------------------------
 
         cursor.execute(
             """
-            INSERT INTO products
-            (
+            INSERT INTO products (
                 barcode,
                 name,
                 category,
@@ -110,7 +101,7 @@ def add_product_with_barcode(
             VALUES (%s, %s, %s, %s, %s, %s, %s)
             """,
             (
-                barcode if barcode else None,
+                barcode or None,
                 name,
                 category,
                 purchase_price,
@@ -129,7 +120,6 @@ def add_product_with_barcode(
     except Exception as error:
 
         connection.rollback()
-
         return False, str(error)
 
     finally:
@@ -139,43 +129,109 @@ def add_product_with_barcode(
 
 
         
-def update_product(product_id, name, category,
-                   purchase_price, selling_price,
-                   stock, minimum_stock):
+# ==========================================================
+# UPDATE PRODUCT
+# ==========================================================
+
+def update_product(
+    product_id,
+    name,
+    category,
+    purchase_price,
+    selling_price,
+    stock,
+    minimum_stock
+):
+
+    name = str(name).strip()
+    category = str(category).strip()
+
+    if not name:
+        raise ValueError(
+            "Product name is required."
+        )
+
+    if not category:
+        raise ValueError(
+            "Product category is required."
+        )
+
+    try:
+        purchase_price = float(purchase_price)
+        selling_price = float(selling_price)
+        stock = int(stock)
+        minimum_stock = int(minimum_stock)
+    except (TypeError, ValueError):
+        raise ValueError(
+            "Invalid product values."
+        )
+
+    if purchase_price <= 0:
+        raise ValueError(
+            "Purchase price must be greater than zero."
+        )
+
+    if selling_price <= 0:
+        raise ValueError(
+            "Selling price must be greater than zero."
+        )
+
+    if stock < 0:
+        raise ValueError(
+            "Stock cannot be negative."
+        )
+
+    if minimum_stock < 0:
+        raise ValueError(
+            "Minimum stock cannot be negative."
+        )
 
     connection = get_connection()
     cursor = connection.cursor()
 
-    query = """
-    UPDATE products
-    SET
-        name=%s,
-        category=%s,
-        purchase_price=%s,
-        selling_price=%s,
-        stock=%s,
-        minimum_stock=%s
-    WHERE product_id=%s
-    """
+    try:
 
-    values = (
-        name,
-        category,
-        purchase_price,
-        selling_price,
-        stock,
-        minimum_stock,
-        product_id
-    )
-    
-    cursor.execute(query, values)
+        cursor.execute(
+            """
+            UPDATE products
+            SET
+                name = %s,
+                category = %s,
+                purchase_price = %s,
+                selling_price = %s,
+                stock = %s,
+                minimum_stock = %s
+            WHERE product_id = %s
+            """,
+            (
+                name,
+                category,
+                purchase_price,
+                selling_price,
+                stock,
+                minimum_stock,
+                product_id
+            )
+        )
 
-    connection.commit()
+        if cursor.rowcount == 0:
+            raise ValueError(
+                "Product not found."
+            )
 
-    cursor.close()
-    connection.close()
+        connection.commit()
 
-    return True
+        return True
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 # ==========================================================
 # ADD STOCK / RECORD PURCHASE
@@ -447,56 +503,88 @@ def get_product_by_barcode(barcode):
 
 def update_product_barcode(product_id, barcode):
 
+    barcode = str(barcode or "").strip()
+
     connection = get_connection()
     cursor = connection.cursor()
 
-    barcode = barcode.strip()
+    try:
 
-    # Empty barcode means remove barcode
-    if barcode == "":
+        # --------------------------------------------------
+        # Verify product exists
+        # --------------------------------------------------
+
         cursor.execute(
             """
-            UPDATE products
-            SET barcode = NULL
+            SELECT product_id
+            FROM products
             WHERE product_id = %s
             """,
             (product_id,)
         )
 
-    else:
-        # Check duplicate
-        cursor.execute(
-            """
-            SELECT product_id
-            FROM products
-            WHERE barcode = %s
-            AND product_id != %s
-            """,
-            (barcode, product_id)
-        )
+        if not cursor.fetchone():
+            raise ValueError(
+                "Product not found."
+            )
 
-        existing = cursor.fetchone()
+        # --------------------------------------------------
+        # Empty barcode = remove barcode
+        # --------------------------------------------------
 
-        if existing:
-            cursor.close()
-            connection.close()
-            return False
+        if not barcode:
 
-        cursor.execute(
-            """
-            UPDATE products
-            SET barcode = %s
-            WHERE product_id = %s
-            """,
-            (barcode, product_id)
-        )
+            cursor.execute(
+                """
+                UPDATE products
+                SET barcode = NULL
+                WHERE product_id = %s
+                """,
+                (product_id,)
+            )
 
-    connection.commit()
+        else:
 
-    cursor.close()
-    connection.close()
+            # --------------------------------------------------
+            # Check duplicate barcode
+            # --------------------------------------------------
 
-    return True
+            cursor.execute(
+                """
+                SELECT product_id
+                FROM products
+                WHERE barcode = %s
+                  AND product_id != %s
+                """,
+                (barcode, product_id)
+            )
+
+            if cursor.fetchone():
+
+                return False
+
+            cursor.execute(
+                """
+                UPDATE products
+                SET barcode = %s
+                WHERE product_id = %s
+                """,
+                (barcode, product_id)
+            )
+
+        connection.commit()
+
+        return True
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 
 # ==========================================================
@@ -608,21 +696,102 @@ def delete_product(product_id):
     connection = get_connection()
     cursor = connection.cursor()
 
-    query = """
-    DELETE FROM products
-    WHERE product_id=%s
-    """
+    try:
 
-    cursor.execute(query, (product_id,))
+        # --------------------------------------------------
+        # Check whether product has sales history
+        # --------------------------------------------------
 
-    connection.commit()
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM sale_items
+            WHERE product_id = %s
+        """, (product_id,))
 
-    deleted = cursor.rowcount
+        sales_count = cursor.fetchone()[0]
 
-    cursor.close()
-    connection.close()
+        # --------------------------------------------------
+        # Check whether product has purchase history
+        # --------------------------------------------------
 
-    return deleted > 0
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM purchases
+            WHERE product_id = %s
+        """, (product_id,))
+
+        purchase_count = cursor.fetchone()[0]
+
+        # --------------------------------------------------
+        # Check stock movement history
+        # --------------------------------------------------
+
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM stock_movements
+            WHERE product_id = %s
+        """, (product_id,))
+
+        movement_count = cursor.fetchone()[0]
+
+        # --------------------------------------------------
+        # Check return history
+        # --------------------------------------------------
+
+        cursor.execute("""
+            SELECT COUNT(*)
+            FROM returns
+            WHERE product_id = %s
+        """, (product_id,))
+
+        return_count = cursor.fetchone()[0]
+
+        # --------------------------------------------------
+        # Prevent deletion of historical products
+        # --------------------------------------------------
+
+        if (
+            sales_count > 0
+            or purchase_count > 0
+            or movement_count > 0
+            or return_count > 0
+        ):
+
+            raise ValueError(
+                "This product has historical records "
+                "and cannot be deleted.\n\n"
+                "Products with sales, purchases, stock movements, "
+                "or returns must be kept for accurate records."
+            )
+
+        # --------------------------------------------------
+        # Delete product
+        # --------------------------------------------------
+
+        cursor.execute("""
+            DELETE FROM products
+            WHERE product_id = %s
+        """, (product_id,))
+
+        if cursor.rowcount == 0:
+
+            raise ValueError(
+                "Product not found."
+            )
+
+        connection.commit()
+
+        return True
+
+    except Exception:
+
+        connection.rollback()
+        raise
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 # ==========================================================
 # SEARCH PRODUCTS
@@ -724,140 +893,96 @@ def get_customer_by_phone(phone):
     return customer
 
 # ==========================================================
-# ADD LOYALTY POINTS
+# COMPLETE BILLING TRANSACTION
 # ==========================================================
 
-def add_loyalty_points(customer_id, bill_amount):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    # 1 point for every ₹100
-    earned_points = int(bill_amount // 100)
-
-    cursor.execute("""
-        UPDATE customers
-        SET loyalty_points = loyalty_points + %s
-        WHERE customer_id = %s
-    """, (earned_points, customer_id))
-
-    connection.commit()
-
-    cursor.close()
-    connection.close()
-
-    return earned_points
-
-
-# ==========================================================
-# GET LOYALTY POINTS
-# ==========================================================
-
-def get_loyalty_points(customer_id):
+def process_sale_transaction(
+    customer_id,
+    cart,
+    total,
+    gst,
+    discount,
+    payment_method,
+    redeemed_points=0
+):
 
     connection = get_connection()
     cursor = connection.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT loyalty_points
-        FROM customers
-        WHERE customer_id = %s
-    """, (customer_id,))
+    try:
 
-    result = cursor.fetchone()
+        # --------------------------------------------------
+        # Validate loyalty redemption
+        # --------------------------------------------------
 
-    cursor.close()
-    connection.close()
-
-    return result["loyalty_points"] if result else 0
-# ==========================================================
-# CREATE CUSTOMER IF NOT EXISTS
-# ==========================================================
-
-def create_customer_if_not_exists(phone, name):
-
-    connection = get_connection()
-    cursor = connection.cursor(dictionary=True)
-
-    # Check if customer already exists
-    cursor.execute(
-        "SELECT customer_id FROM customers WHERE phone = %s",
-        (phone,)
-    )
-
-    customer = cursor.fetchone()
-
-    if customer:
-        customer_id = customer["customer_id"]
-
-    else:
-        cursor.execute(
-            """
-            INSERT INTO customers (name, phone)
-            VALUES (%s, %s)
-            """,
-            (name.title(), phone)
+        redeemed_points = int(
+            redeemed_points or 0
         )
 
-        connection.commit()
+        if redeemed_points < 0:
+            raise ValueError(
+                "Redeemed loyalty points cannot be negative."
+            )
 
-        customer_id = cursor.lastrowid
+        if redeemed_points % 50 != 0:
+            raise ValueError(
+                "Loyalty points must be redeemed in multiples of 50."
+            )
 
-    cursor.close()
-    connection.close()
+        # --------------------------------------------------
+        # Lock customer row
+        # --------------------------------------------------
 
-    return customer_id
+        cursor.execute("""
+            SELECT loyalty_points
+            FROM customers
+            WHERE customer_id = %s
+            FOR UPDATE
+        """, (customer_id,))
 
-# ==========================================================
-# CREATE SALE
-# ==========================================================
+        customer = cursor.fetchone()
 
-def create_sale(customer_id, total, gst, discount, payment_method):
+        if not customer:
+            raise ValueError(
+                "Customer not found."
+            )
 
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    query = """
-        INSERT INTO sales (
-            customer_id,
-            total_amount,
-            gst_amount,
-            discount_amount,
-            payment_method
+        available_points = int(
+            customer["loyalty_points"] or 0
         )
-        VALUES (%s, %s, %s, %s, %s)
-    """
 
-    cursor.execute(
-        query,
-        (
+        if redeemed_points > available_points:
+            raise ValueError(
+                f"Customer has only "
+                f"{available_points} loyalty points."
+            )
+
+        # --------------------------------------------------
+        # Create sale
+        # --------------------------------------------------
+
+        cursor.execute("""
+            INSERT INTO sales (
+                customer_id,
+                total_amount,
+                gst_amount,
+                discount_amount,
+                payment_method
+            )
+            VALUES (%s, %s, %s, %s, %s)
+        """, (
             customer_id,
             total,
             gst,
             discount,
             payment_method
-        )
-    )
+        ))
 
-    connection.commit()
+        sale_id = cursor.lastrowid
 
-    sale_id = cursor.lastrowid
-
-    cursor.close()
-    connection.close()
-
-    return sale_id
-
-# ==========================================================
-# SAVE ALL PRODUCTS OF A SALE
-# ==========================================================
-
-def add_sale_items(sale_id, cart):
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    try:
+        # --------------------------------------------------
+        # Save sale items + update stock
+        # --------------------------------------------------
 
         for item in cart:
 
@@ -866,31 +991,44 @@ def add_sale_items(sale_id, cart):
             selling_price = float(item["price"])
             subtotal = float(item["subtotal"])
 
-            # --------------------------------------------------
-            # Get the CURRENT purchase cost of the product
-            # --------------------------------------------------
+            if quantity <= 0:
+                raise ValueError(
+                    "Product quantity must be greater than zero."
+                )
 
             cursor.execute("""
-                SELECT purchase_price
+                SELECT
+                    purchase_price,
+                    stock
                 FROM products
                 WHERE product_id = %s
                 FOR UPDATE
             """, (product_id,))
 
-            result = cursor.fetchone()
+            product = cursor.fetchone()
 
-            if not result:
+            if not product:
                 raise ValueError(
                     f"Product {product_id} not found."
                 )
 
             purchase_price = float(
-                result[0]
+                product["purchase_price"]
             )
 
-            # --------------------------------------------------
-            # Save sale item including purchase price
-            # --------------------------------------------------
+            current_stock = int(
+                product["stock"]
+            )
+
+            if current_stock < quantity:
+                raise ValueError(
+                    f"Insufficient stock for product ID "
+                    f"{product_id}."
+                )
+
+            stock_after = (
+                current_stock - quantity
+            )
 
             cursor.execute("""
                 INSERT INTO sale_items (
@@ -911,38 +1049,6 @@ def add_sale_items(sale_id, cart):
                 subtotal
             ))
 
-            # --------------------------------------------------
-            # Get current stock
-            # --------------------------------------------------
-
-            cursor.execute("""
-                SELECT stock
-                FROM products
-                WHERE product_id = %s
-                FOR UPDATE
-            """, (product_id,))
-
-            current_stock = cursor.fetchone()[0]
-
-            # --------------------------------------------------
-            # Check stock
-            # --------------------------------------------------
-
-            if current_stock < quantity:
-
-                raise ValueError(
-                    f"Insufficient stock for product ID "
-                    f"{product_id}."
-                )
-
-            stock_after = (
-                current_stock - quantity
-            )
-
-            # --------------------------------------------------
-            # Update stock
-            # --------------------------------------------------
-
             cursor.execute("""
                 UPDATE products
                 SET stock = %s
@@ -951,10 +1057,6 @@ def add_sale_items(sale_id, cart):
                 stock_after,
                 product_id
             ))
-
-            # --------------------------------------------------
-            # Record SALE stock movement
-            # --------------------------------------------------
 
             cursor.execute("""
                 INSERT INTO stock_movements (
@@ -971,7 +1073,120 @@ def add_sale_items(sale_id, cart):
                 stock_after
             ))
 
+        # --------------------------------------------------
+        # Redeem loyalty points
+        # --------------------------------------------------
+
+        if redeemed_points > 0:
+
+            cursor.execute("""
+                UPDATE customers
+                SET loyalty_points = loyalty_points - %s
+                WHERE customer_id = %s
+            """, (
+                redeemed_points,
+                customer_id
+            ))
+
+        # --------------------------------------------------
+        # Earn new loyalty points
+        # 1 point for every ₹100 of final bill amount
+        # --------------------------------------------------
+
+        earned_points = int(
+            float(total) // 100
+        )
+
+        if earned_points > 0:
+
+            cursor.execute("""
+                UPDATE customers
+                SET loyalty_points = loyalty_points + %s
+                WHERE customer_id = %s
+            """, (
+                earned_points,
+                customer_id
+            ))
+
+        remaining_points = (
+            available_points
+            - redeemed_points
+            + earned_points
+        )
+
         connection.commit()
+
+        return {
+            "success": True,
+            "sale_id": sale_id,
+            "redeemed_points": redeemed_points,
+            "earned_points": earned_points,
+            "remaining_points": remaining_points
+        }
+
+    except Exception:
+        connection.rollback()
+        raise
+
+    finally:
+        cursor.close()
+        connection.close()
+
+# ==========================================================
+# GET CUSTOMER ID OR CREATE NEW CUSTOMER
+# ==========================================================
+
+def get_or_create_customer(name, phone):
+
+    name = name.strip()
+    phone = phone.strip()
+
+    if not name:
+        raise ValueError(
+            "Customer name is required."
+        )
+
+    if not phone:
+        raise ValueError(
+            "Customer phone is required."
+        )
+
+    connection = get_connection()
+    cursor = connection.cursor(dictionary=True)
+
+    try:
+
+        cursor.execute("""
+            SELECT customer_id
+            FROM customers
+            WHERE phone = %s
+            FOR UPDATE
+        """, (phone,))
+
+        customer = cursor.fetchone()
+
+        if customer:
+
+            connection.commit()
+
+            return customer["customer_id"]
+
+        cursor.execute("""
+            INSERT INTO customers (
+                name,
+                phone
+            )
+            VALUES (%s, %s)
+        """, (
+            name,
+            phone
+        ))
+
+        customer_id = cursor.lastrowid
+
+        connection.commit()
+
+        return customer_id
 
     except Exception:
 
@@ -982,101 +1197,6 @@ def add_sale_items(sale_id, cart):
 
         cursor.close()
         connection.close()
-
-# ==========================================================
-# UPDATE PRODUCT STOCK AFTER SALE
-# ==========================================================
-
-def update_stock_after_sale(cart):
-
-    connection = get_connection()
-    cursor = connection.cursor(dictionary=True)
-
-    for item in cart:
-
-        # Get current stock
-        cursor.execute(
-            """
-            SELECT stock
-            FROM products
-            WHERE product_id = %s
-            """,
-            (item["id"],)
-        )
-
-        product = cursor.fetchone()
-
-        if not product:
-            continue
-
-        current_stock = product["stock"]
-        new_stock = current_stock - item["quantity"]
-
-        # Update products table
-        cursor.execute(
-            """
-            UPDATE products
-            SET stock = %s
-            WHERE product_id = %s
-            """,
-            (new_stock, item["id"])
-        )
-
-        # Save stock movement history
-        cursor.execute(
-            """
-            INSERT INTO stock_movements (
-                product_id,
-                movement_type,
-                quantity,
-                stock_after
-            )
-            VALUES (%s, %s, %s, %s)
-            """,
-            (
-                item["id"],
-                "SALE",
-                -item["quantity"],
-                new_stock
-            )
-        )
-
-    connection.commit()
-
-    cursor.close()
-    connection.close()
-
-    # ==========================================================
-# GET CUSTOMER ID OR CREATE NEW CUSTOMER
-# ==========================================================
-
-def get_or_create_customer(name, phone):
-
-    customer = get_customer_by_phone(phone)
-
-    if customer:
-        return customer["customer_id"]
-
-    connection = get_connection()
-    cursor = connection.cursor()
-
-    cursor.execute(
-        """
-        INSERT INTO customers (name, phone)
-        VALUES (%s, %s)
-        """,
-        (name, phone)
-    )
-
-    connection.commit()
-
-    customer_id = cursor.lastrowid
-
-    cursor.close()
-    connection.close()
-
-    return customer_id
-
 
 # ==========================================================
 # GET ALL CUSTOMERS
@@ -1493,112 +1613,141 @@ def get_today_profit_analytics():
     connection = get_connection()
     cursor = connection.cursor()
 
-    # ------------------------------------------------------
-    # Total revenue and original COGS from today's sales
-    # ------------------------------------------------------
+    try:
 
-    cursor.execute("""
-        SELECT
-            COALESCE(SUM(si.subtotal), 0),
-            COALESCE(
-                SUM(
-                    si.purchase_price * si.quantity
-                ),
-                0
-            )
-        FROM sale_items si
-        JOIN sales s
-            ON si.sale_id = s.sale_id
-        WHERE DATE(s.sale_date) = CURDATE()
-    """)
+        # --------------------------------------------------
+        # Today's net sales revenue before GST
+        #
+        # total_amount includes GST.
+        # Subtract gst_amount to get the amount actually
+        # attributable to the products after discounts.
+        # --------------------------------------------------
 
-    sales_revenue, sales_cogs = cursor.fetchone()
+        cursor.execute("""
+            SELECT
+                COALESCE(
+                    SUM(
+                        s.total_amount - s.gst_amount
+                    ),
+                    0
+                )
+            FROM sales s
+            WHERE DATE(s.sale_date) = CURDATE()
+        """)
 
-    sales_revenue = float(
-        sales_revenue or 0
-    )
+        sales_revenue = float(
+            cursor.fetchone()[0] or 0
+        )
 
-    sales_cogs = float(
-        sales_cogs or 0
-    )
+        # --------------------------------------------------
+        # Today's original cost of goods sold
+        #
+        # Historical purchase_price is stored in sale_items,
+        # so profit remains based on the purchase cost that
+        # existed when the sale was made.
+        # --------------------------------------------------
 
-    # ------------------------------------------------------
-    # Today's refunds
-    # ------------------------------------------------------
+        cursor.execute("""
+            SELECT
+                COALESCE(
+                    SUM(
+                        si.purchase_price * si.quantity
+                    ),
+                    0
+                )
+            FROM sale_items si
+            JOIN sales s
+                ON si.sale_id = s.sale_id
+            WHERE DATE(s.sale_date) = CURDATE()
+        """)
 
-    cursor.execute("""
-        SELECT
-            COALESCE(SUM(r.refund_amount), 0)
-        FROM returns r
-        WHERE DATE(r.return_date) = CURDATE()
-    """)
+        sales_cogs = float(
+            cursor.fetchone()[0] or 0
+        )
 
-    total_refunds = float(
-        cursor.fetchone()[0] or 0
-    )
+        # --------------------------------------------------
+        # Today's refunds
+        # --------------------------------------------------
 
-    # ------------------------------------------------------
-    # Cost of returned items
-    #
-    # Use the historical purchase_price saved in sale_items
-    # ------------------------------------------------------
+        cursor.execute("""
+            SELECT
+                COALESCE(
+                    SUM(r.refund_amount),
+                    0
+                )
+            FROM returns r
+            WHERE DATE(r.return_date) = CURDATE()
+        """)
 
-    cursor.execute("""
-        SELECT
-            COALESCE(
-                SUM(
-                    si.purchase_price * r.quantity
-                ),
-                0
-            )
-        FROM returns r
-        JOIN sale_items si
-            ON r.sale_item_id = si.sale_item_id
-        WHERE DATE(r.return_date) = CURDATE()
-    """)
+        total_refunds = float(
+            cursor.fetchone()[0] or 0
+        )
 
-    returned_cogs = float(
-        cursor.fetchone()[0] or 0
-    )
+        # --------------------------------------------------
+        # Cost of returned items
+        #
+        # Use the historical purchase price stored in
+        # sale_items.
+        # --------------------------------------------------
 
-    # ------------------------------------------------------
-    # Return-aware calculations
-    # ------------------------------------------------------
+        cursor.execute("""
+            SELECT
+                COALESCE(
+                    SUM(
+                        si.purchase_price * r.quantity
+                    ),
+                    0
+                )
+            FROM returns r
+            JOIN sale_items si
+                ON r.sale_item_id = si.sale_item_id
+            WHERE DATE(r.return_date) = CURDATE()
+        """)
 
-    net_revenue = (
-        sales_revenue
-        - total_refunds
-    )
+        returned_cogs = float(
+            cursor.fetchone()[0] or 0
+        )
 
-    net_cogs = (
-        sales_cogs
-        - returned_cogs
-    )
+        # --------------------------------------------------
+        # Return-aware calculations
+        # --------------------------------------------------
 
-    gross_profit = (
-        net_revenue
-        - net_cogs
-    )
+        net_revenue = (
+            sales_revenue
+            - total_refunds
+        )
 
-    profit_margin = (
-        (gross_profit / net_revenue) * 100
-        if net_revenue > 0
-        else 0
-    )
+        net_cogs = (
+            sales_cogs
+            - returned_cogs
+        )
 
-    cursor.close()
-    connection.close()
+        gross_profit = (
+            net_revenue
+            - net_cogs
+        )
 
-    return {
-        "revenue": sales_revenue,
-        "refunds": total_refunds,
-        "net_revenue": net_revenue,
-        "cost_of_goods": sales_cogs,
-        "returned_cogs": returned_cogs,
-        "net_cogs": net_cogs,
-        "gross_profit": gross_profit,
-        "profit_margin": profit_margin
-    }
+        profit_margin = (
+            (gross_profit / net_revenue) * 100
+            if net_revenue > 0
+            else 0
+        )
+
+        return {
+            "revenue": sales_revenue,
+            "refunds": total_refunds,
+            "net_revenue": net_revenue,
+            "cost_of_goods": sales_cogs,
+            "returned_cogs": returned_cogs,
+            "net_cogs": net_cogs,
+            "gross_profit": gross_profit,
+            "profit_margin": profit_margin
+        }
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 
 # ==========================================================
@@ -1890,44 +2039,56 @@ def get_supplier_purchase_history(supplier_id, limit=50):
 # ==========================================================
 # DASHBOARD INVENTORY ALERT SUMMARY
 # ==========================================================
+
 def get_dashboard_inventory_alerts():
 
     connection = get_connection()
     cursor = connection.cursor(dictionary=True)
 
-    # Healthy Products
-    cursor.execute("""
-        SELECT COUNT(*) AS total
-        FROM products
-        WHERE stock > minimum_stock
-    """)
-    healthy = cursor.fetchone()["total"]
+    try:
 
-    # Low Stock
-    cursor.execute("""
-        SELECT COUNT(*) AS total
-        FROM products
-        WHERE stock <= minimum_stock
-        AND stock > 0
-    """)
-    low_stock = cursor.fetchone()["total"]
+        cursor.execute("""
+            SELECT
+                COALESCE(SUM(
+                    CASE
+                        WHEN stock > minimum_stock
+                        THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS healthy,
 
-    # Out of Stock
-    cursor.execute("""
-        SELECT COUNT(*) AS total
-        FROM products
-        WHERE stock = 0
-    """)
-    out_stock = cursor.fetchone()["total"]
+                COALESCE(SUM(
+                    CASE
+                        WHEN stock <= minimum_stock
+                             AND stock > 0
+                        THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS low_stock,
 
-    cursor.close()
-    connection.close()
+                COALESCE(SUM(
+                    CASE
+                        WHEN stock = 0
+                        THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS out_stock
 
-    return {
-        "healthy": healthy,
-        "low_stock": low_stock,
-        "out_stock": out_stock
-    }
+            FROM products
+        """)
+
+        result = cursor.fetchone()
+
+        return {
+            "healthy": int(result["healthy"] or 0),
+            "low_stock": int(result["low_stock"] or 0),
+            "out_stock": int(result["out_stock"] or 0)
+        }
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 # ==========================================================
 # DASHBOARD BUSINESS INSIGHTS
@@ -1941,7 +2102,18 @@ def get_dashboard_insights():
     insights = []
 
     # Today's Revenue
-    revenue = get_today_revenue()
+    cursor.execute("""
+            SELECT COALESCE(
+                SUM(total_amount),
+                0
+            ) AS revenue
+            FROM sales
+            WHERE DATE(sale_date) = CURDATE()
+    """)
+
+    revenue = float(
+        cursor.fetchone()["revenue"] or 0
+    )
 
     if revenue >= 5000:
         insights.append(
@@ -2311,46 +2483,79 @@ def get_payment_analytics():
 def get_inventory_health():
 
     connection = get_connection()
-    cursor = connection.cursor()
+    cursor = connection.cursor(dictionary=True)
 
-    cursor.execute("""
-        SELECT stock, minimum_stock
-        FROM products
-    """)
+    try:
 
-    products = cursor.fetchall()
+        cursor.execute("""
+            SELECT
+                COUNT(*) AS total_products,
 
-    cursor.close()
-    connection.close()
+                COALESCE(SUM(
+                    CASE
+                        WHEN stock > minimum_stock
+                        THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS healthy,
 
-    total_products = len(products)
+                COALESCE(SUM(
+                    CASE
+                        WHEN stock <= minimum_stock
+                             AND stock > 0
+                        THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS low_stock,
 
-    healthy = 0
-    low_stock = 0
-    out_of_stock = 0
+                COALESCE(SUM(
+                    CASE
+                        WHEN stock = 0
+                        THEN 1
+                        ELSE 0
+                    END
+                ), 0) AS out_of_stock
 
-    for stock, minimum in products:
+            FROM products
+        """)
 
-        if stock == 0:
-            out_of_stock += 1
+        result = cursor.fetchone()
 
-        elif stock <= minimum:
-            low_stock += 1
+        total_products = int(
+            result["total_products"] or 0
+        )
 
-        else:
-            healthy += 1
+        healthy = int(
+            result["healthy"] or 0
+        )
 
-    score = 0
+        low_stock = int(
+            result["low_stock"] or 0
+        )
 
-    if total_products > 0:
-        score = round((healthy / total_products) * 100)
+        out_of_stock = int(
+            result["out_of_stock"] or 0
+        )
 
-    return {
-        "healthy": healthy,
-        "low_stock": low_stock,
-        "out_of_stock": out_of_stock,
-        "score": score
-    }
+        score = (
+            round(
+                (healthy / total_products) * 100
+            )
+            if total_products > 0
+            else 0
+        )
+
+        return {
+            "healthy": healthy,
+            "low_stock": low_stock,
+            "out_of_stock": out_of_stock,
+            "score": score
+        }
+
+    finally:
+
+        cursor.close()
+        connection.close()
 
 
 # ==========================================================

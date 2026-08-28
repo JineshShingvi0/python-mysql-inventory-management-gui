@@ -1,6 +1,3 @@
-# gui/billing.py (Clean Version)
-
-
 import customtkinter as ctk
 from tkinter import ttk, messagebox
 
@@ -9,10 +6,7 @@ from backend import (
     get_products_for_billing,
     get_or_create_customer,
     get_customer_by_phone,
-    create_sale,
-    add_sale_items,
-    update_stock_after_sale,
-    add_loyalty_points,
+    process_sale_transaction,
     get_product_by_barcode
 )
 
@@ -39,6 +33,15 @@ class BillingPage(ctk.CTkScrollableFrame):
 
         # Load products from database
         self.load_products()    
+
+        self.current_subtotal = 0.0
+        self.current_discount = 0.0
+        self.current_gst = 0.0
+        self.current_total = 0.0
+
+        self.available_loyalty_points = 0
+        self.redeemed_loyalty_points = 0
+        self.loyalty_discount = 0.0
 
         # ==========================================================
         # KEYBOARD POS CONTROLS
@@ -77,27 +80,82 @@ class BillingPage(ctk.CTkScrollableFrame):
             }
 
         if product_names:
-            self.product_combo.configure(values=product_names)
-            self.product_combo.set(product_names[0])
+
+            self.product_combo.configure(
+                values=product_names
+            )
+
+            self.product_combo.set(
+                product_names[0]
+            )
+
+        else:
+
+            self.product_combo.configure(
+                values=["No products available"]
+            )
+
+            self.product_combo.set(
+                "No products available"
+            )
 
     # ==========================================================
-    #FETCH CUSTOMER DETAILS
+    # FETCH CUSTOMER DETAILS
     # ==========================================================
 
     def fetch_customer_details(self, event=None):
 
         phone = self.phone_var.get().strip()
 
-        # Incomplete phone number
-        if len(phone) != 10:
+        # ------------------------------------------------------
+        # Invalid / incomplete phone number
+        # ------------------------------------------------------
+
+        if not phone.isdigit() or len(phone) != 10:
 
             self.customer_name_var.set("")
-            self.points_var.set("⭐ Loyalty Points : 0")
+            self.points_var.set(
+                "⭐ Loyalty Points : 0"
+            )
+
             self.customer_id = None
+
+            self.available_loyalty_points = 0
+            self.redeemed_loyalty_points = 0
+            self.redeemed_loyalty_points = 0
+            self.loyalty_discount = 0.0
+
+
+            self.loyalty_redeem_var.set("0")
+
+            self.loyalty_discount_var.set(
+                "₹0.00"
+            )
+
+            self.loyalty_available_label.configure(
+                text="Available: 0 points"
+            )
 
             self.update_receipt_preview()
 
             return
+
+        # ------------------------------------------------------
+        # Reset redemption for the newly entered phone
+        # ------------------------------------------------------
+
+        self.redeemed_loyalty_points = 0
+        self.loyalty_discount = 0.0
+
+        self.loyalty_redeem_var.set("0")
+
+        self.loyalty_discount_var.set(
+            "₹0.00"
+        )
+
+        # ------------------------------------------------------
+        # Find customer
+        # ------------------------------------------------------
 
         customer = get_customer_by_phone(phone)
 
@@ -109,8 +167,20 @@ class BillingPage(ctk.CTkScrollableFrame):
                 customer["name"]
             )
 
+            self.available_loyalty_points = int(
+                customer["loyalty_points"] or 0
+            )
+
             self.points_var.set(
-                f"⭐ Loyalty Points : {customer['loyalty_points']}"
+                f"⭐ Loyalty Points : "
+                f"{self.available_loyalty_points}"
+            )
+
+            self.loyalty_available_label.configure(
+                text=(
+                    f"Available: "
+                    f"{self.available_loyalty_points} points"
+                )
             )
 
         else:
@@ -119,40 +189,21 @@ class BillingPage(ctk.CTkScrollableFrame):
 
             self.customer_name_var.set("")
 
+            self.available_loyalty_points = 0
+
             self.points_var.set(
                 "⭐ Loyalty Points : New Customer"
             )
 
-        # Update receipt immediately
-        self.update_receipt_preview()
-    # ==========================================================
-    # FETCH CUSTOMER FROM PHONE NUMBER
-    # ==========================================================
-
-    def fetch_customer(self, event=None):
-
-        phone = self.phone_var.get().strip()
-
-        # Wait until phone number is complete
-        if len(phone) != 10:
-            self.customer_name_var.set("")
-            self.points_var.set("⭐ Loyalty Points : 0")
-            return
-
-        customer = get_customer_by_phone(phone)
-
-        if customer:
-
-            self.customer_name_var.set(customer["name"])
-
-            self.points_var.set(
-                f"⭐ Loyalty Points : {customer['loyalty_points']}"
+            self.loyalty_available_label.configure(
+                text="Available: 0 points"
             )
 
-        else:
+        # ------------------------------------------------------
+        # Update receipt
+        # ------------------------------------------------------
 
-            self.customer_name_var.set("")
-            self.points_var.set("⭐ Loyalty Points : New Customer")
+        self.update_receipt_preview()
 
     # ==========================================================
     # ADD PRODUCT TO BILLING CART
@@ -182,8 +233,19 @@ class BillingPage(ctk.CTkScrollableFrame):
             )
             return
 
-        product = self.products_data[product_name]
+        product = self.products_data.get(
+            product_name
+        )
 
+        if product is None:
+
+            messagebox.showerror(
+                "Product Error",
+                "The selected product is no longer available."
+            )
+
+            return
+        
         # Stock Validation
         if quantity > product["stock"]:
             messagebox.showerror(
@@ -408,29 +470,11 @@ class BillingPage(ctk.CTkScrollableFrame):
                 ).pack(
                     side="right"
                 )
-
         # Totals
-        subtotal = sum(
-            item["subtotal"]
-            for item in self.cart
-        )
-
-        try:
-            discount_percent = float(
-                self.discount_percent_var.get() or 0
-            )
-        except ValueError:
-            discount_percent = 0
-
-        discount = subtotal * (
-            discount_percent / 100
-        )
-
-        taxable_amount = subtotal - discount
-
-        gst = taxable_amount * 0.18
-
-        grand_total = taxable_amount + gst
+        subtotal = self.current_subtotal
+        discount = self.current_discount
+        gst = self.current_gst
+        grand_total = self.current_total
 
         self.receipt_subtotal_var.set(
             f"₹{subtotal:,.2f}"
@@ -473,7 +517,10 @@ class BillingPage(ctk.CTkScrollableFrame):
                 )
             )
 
-        self.calculate_summary(subtotal)
+        self.calculate_summary(
+            subtotal
+        )
+
         self.update_receipt_preview()
 
     # ==========================================================
@@ -618,33 +665,181 @@ class BillingPage(ctk.CTkScrollableFrame):
                 break
 
         self.refresh_cart()
+
+    # ==========================================================
+    # LOYALTY REDEMPTION PREVIEW
+    # ==========================================================
+
+    def update_loyalty_redemption(self, event=None):
+
+        try:
+
+            points = int(
+                self.loyalty_redeem_var.get().strip() or 0
+            )
+
+        except ValueError:
+
+            self.loyalty_discount = 0.0
+
+            self.loyalty_discount_var.set(
+                "₹0.00"
+            )
+
+            self.calculate_summary(
+                sum(
+                    item["subtotal"]
+                    for item in self.cart
+                )
+            )
+
+            return
+
+        if points < 0:
+
+            points = 0
+
+            self.loyalty_redeem_var.set(
+                "0"
+            )
+
+        if points % 50 != 0:
+
+            self.redeemed_loyalty_points = 0
+            self.loyalty_discount = 0.0
+
+            self.loyalty_discount_var.set(
+                "Use multiples of 50 points"
+            )
+
+            return
+
+        if points > self.available_loyalty_points:
+
+            self.redeemed_loyalty_points = 0
+            self.loyalty_discount = 0.0
+
+            self.loyalty_discount_var.set(
+                f"Max {self.available_loyalty_points} points"
+            )
+
+            return
+
+        subtotal = sum(
+            item["subtotal"]
+            for item in self.cart
+        )
+
+        try:
+
+            discount_percent = float(
+                self.discount_percent_var.get() or 0
+            )
+
+        except ValueError:
+
+            discount_percent = 0
+
+        normal_discount = (
+            subtotal
+            * discount_percent
+            / 100
+        )
+
+        remaining_after_discount = max(
+            subtotal - normal_discount,
+            0
+        )
+
+        loyalty_discount = (
+            points // 50
+        ) * 10
+
+        if loyalty_discount > remaining_after_discount:
+
+            self.redeemed_loyalty_points = 0
+            self.loyalty_discount = 0.0
+
+            self.loyalty_discount_var.set(
+                "Discount exceeds bill"
+            )
+
+            return
+
+        self.redeemed_loyalty_points = points
+        self.loyalty_discount = float(
+            loyalty_discount
+        )
+
+        self.loyalty_discount_var.set(
+            f"₹{self.loyalty_discount:,.2f}"
+        )
+
+        self.calculate_summary(
+            subtotal
+        )
     # ==========================================================
     # BILL SUMMARY CALCULATION
     # ==========================================================
 
     def calculate_summary(self, subtotal):
 
-        discount_percent = float(self.discount_percent_var.get() or 0)
+        try:
 
-        discount = subtotal * discount_percent / 100
+            discount_percent = float(
+                self.discount_percent_var.get() or 0
+            )
 
-        taxable_amount = subtotal - discount
+        except ValueError:
+
+            discount_percent = 0
+
+        normal_discount = (
+            subtotal
+            * discount_percent
+            / 100
+        )
+
+        discount = (
+            normal_discount
+            + self.loyalty_discount
+        )
+
+        discount = min(
+            discount,
+            subtotal
+        )
+
+        taxable_amount = (
+            subtotal - discount
+        )
 
         gst = taxable_amount * 0.18
 
-        grand_total = taxable_amount + gst
+        grand_total = (
+            taxable_amount + gst
+        )
 
-        # Save values for Generate Bill
         self.current_subtotal = subtotal
         self.current_discount = discount
         self.current_gst = gst
         self.current_total = grand_total
 
-        self.subtotal_var.set(f"₹{subtotal:.2f}")
-        self.discount_var.set(f"₹{discount:.2f}")
-        self.gst_var.set(f"₹{gst:.2f}")
-        self.total_var.set(f"₹{grand_total:.2f}")
+        self.subtotal_var.set(
+            f"₹{subtotal:.2f}"
+        )
 
+        self.discount_var.set(
+            f"₹{discount:.2f}"
+        )
+
+        self.gst_var.set(
+            f"₹{gst:.2f}"
+        )
+
+        self.total_var.set(
+            f"₹{grand_total:.2f}"
+        )
 
     # ==========================================================
     # KEYBOARD POS CONTROLS
@@ -805,41 +1000,47 @@ class BillingPage(ctk.CTkScrollableFrame):
             )
             return
 
-        # ---------------- Calculate Totals ----------------
-        subtotal = sum(item["subtotal"] for item in self.cart)
+        # ---------------- Use Calculated Totals ----------------
+
+        subtotal = self.current_subtotal
+        discount = self.current_discount
+        gst = self.current_gst
+        grand_total = self.current_total
+        redeemed_points = self.redeemed_loyalty_points
+        # ---------------- Customer ----------------
+
+        customer_id = get_or_create_customer(
+            customer_name,
+            phone
+        )
+
+        # ---------------- Complete Sale Transaction ----------------
 
         try:
-            discount_percent = float(self.discount_percent_var.get())
-        except ValueError:
-            discount_percent = 0
 
-        discount = subtotal * (discount_percent / 100)
+            result = process_sale_transaction(
+                customer_id=customer_id,
+                cart=self.cart,
+                total=grand_total,
+                gst=gst,
+                discount=discount,
+                payment_method=payment,
+                redeemed_points=redeemed_points
+            )
 
-        taxable_amount = subtotal - discount
+        except Exception as error:
 
-        gst = taxable_amount * 0.18
+            messagebox.showerror(
+                "Bill Generation Failed",
+                f"Unable to complete the bill.\n\n{error}"
+            )
 
-        grand_total = taxable_amount + gst
-        # ---------------- Customer ----------------
-        customer_id = get_or_create_customer(customer_name, phone)
+            return
 
-        # ---------------- Create Sale ----------------
-        sale_id = create_sale(
-            customer_id=customer_id,
-            total=grand_total,
-            gst=gst,
-            discount=discount,
-            payment_method=payment
-        )
+        sale_id = result["sale_id"]
 
-        # ---------------- Save Sale Items ----------------
-        add_sale_items(sale_id, self.cart)
-
-        # ---------------- Loyalty Points ----------------
-        earned_points = add_loyalty_points(
-            customer_id,
-            grand_total
-        )
+        earned_points = result["earned_points"]
+        remaining_points = result["remaining_points"]
 
         # Refresh loyalty label immediately
         self.fetch_customer_details()
@@ -860,13 +1061,16 @@ class BillingPage(ctk.CTkScrollableFrame):
         # ---------------- Success Popup ----------------
         messagebox.showinfo(
             "Bill Generated Successfully",
-            f"""Invoice Saved Successfully!
-
-            ⭐ Loyalty Points Earned: {earned_points}
-
-                Invoice:
-                {invoice_path}"""
-        )
+            f"Invoice Saved Successfully!\n\n"
+            f"⭐ Loyalty Points Redeemed: "
+            f"{redeemed_points}\n"
+            f"⭐ Loyalty Points Earned: "
+            f"{earned_points}\n"
+            f"⭐ Remaining Loyalty Points: "
+            f"{remaining_points}\n\n"
+            f"Invoice:\n"
+            f"{invoice_path}"
+        )   
 
         # ---------------- Reset Billing Screen ----------------
         self.cart.clear()
@@ -927,8 +1131,6 @@ class BillingPage(ctk.CTkScrollableFrame):
         self.phone_var = ctk.StringVar()
         self.customer_name_var = ctk.StringVar()
         self.payment_method_var = ctk.StringVar(value="Cash")
-        self.points_var = ctk.StringVar(value="⭐ Loyalty Points : 0")
-
 
         # Phone
         ctk.CTkLabel(customer_frame, text="Phone Number").grid(
@@ -994,7 +1196,7 @@ class BillingPage(ctk.CTkScrollableFrame):
             values=["Cash", "UPI", "Card"],
             variable=self.payment_method_var,
             height=38,
-            command=lambda value: self.update_receipt_preview()
+            command=lambda _: self.update_receipt_preview()
         )
 
         self.payment_combo.grid(
@@ -1084,9 +1286,10 @@ class BillingPage(ctk.CTkScrollableFrame):
             )
 
         self.barcode_entry.bind(
-                "<KP_Enter>",
-                lambda event: self.scan_barcode(event)
-            )
+            "<KP_Enter>",
+            self.scan_barcode
+        )
+
         self.barcode_status = ctk.CTkLabel(
             product_frame,
             text="🟢 READY",
@@ -1792,17 +1995,113 @@ class BillingPage(ctk.CTkScrollableFrame):
             lambda event: self.refresh_cart()
         )
 
-        summary_row("Discount", self.discount_var, 2)
-        summary_row("GST (18%)", self.gst_var, 3)
+        # ----------------------------------------------------------
+        # NORMAL DISCOUNT
+        # ----------------------------------------------------------
+
+        summary_row(
+            "Discount",
+            self.discount_var,
+            2
+        )
+
+        # ----------------------------------------------------------
+        # LOYALTY REDEMPTION
+        # ----------------------------------------------------------
+
+        ctk.CTkLabel(
+            summary_frame,
+            text="Redeem Loyalty Points",
+            font=("Poppins", 14)
+        ).grid(
+            row=3,
+            column=0,
+            sticky="w",
+            padx=20,
+            pady=8
+        )
+
+        self.loyalty_redeem_var = ctk.StringVar(
+            value="0"
+        )
+
+        self.loyalty_redeem_entry = ctk.CTkEntry(
+            summary_frame,
+            textvariable=self.loyalty_redeem_var,
+            width=80,
+            height=30,
+            justify="center"
+        )
+
+        self.loyalty_redeem_entry.grid(
+            row=3,
+            column=1,
+            sticky="w",
+            padx=(10, 0)
+        )
+
+        self.loyalty_redeem_entry.bind(
+            "<KeyRelease>",
+            self.update_loyalty_redemption
+        )
+
+        self.loyalty_discount_var = ctk.StringVar(
+            value="₹0.00"
+        )
+
+        ctk.CTkLabel(
+            summary_frame,
+            textvariable=self.loyalty_discount_var,
+            font=("Poppins", 14, "bold"),
+            text_color="#D97706"
+        ).grid(
+            row=3,
+            column=2,
+            sticky="e",
+            padx=20,
+            pady=8
+        )
+
+        self.loyalty_available_label = ctk.CTkLabel(
+            summary_frame,
+            text="Available: 0 points",
+            font=("Poppins", 10),
+            text_color="#64748B"
+        )
+
+        self.loyalty_available_label.grid(
+            row=4,
+            column=0,
+            columnspan=2,
+            sticky="w",
+            padx=20,
+            pady=(0, 5)
+        )
+
+        summary_row(
+            "GST (18%)",
+            self.gst_var,
+            5
+        )
 
         ctk.CTkFrame(
             summary_frame,
             height=2,
             fg_color="#D1D5DB"
-        ).grid(row=5, column=0, columnspan=2,
-               sticky="ew", padx=20, pady=10)
+        ).grid(
+            row=6,
+            column=0,
+            columnspan=3,
+            sticky="ew",
+            padx=20,
+            pady=10
+        )
 
-        summary_row("Grand Total", self.total_var, 5)
+        summary_row(
+            "Grand Total",
+            self.total_var,
+            7
+        )
 
         self.generate_button = ctk.CTkButton(
             summary_frame,
@@ -1815,7 +2114,7 @@ class BillingPage(ctk.CTkScrollableFrame):
         )
 
         self.generate_button.grid(
-            row=7,
+            row=9,
             column=0,
             columnspan=2,
             sticky="ew",

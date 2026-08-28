@@ -1,14 +1,9 @@
-import customtkinter as ctk
-from PIL import Image
-from tkinter import ttk
-from gui.products import ProductsPage
-from gui.billing import BillingPage
-from gui.customers import CustomersPage
 from datetime import datetime
-from gui.reports import ReportsPage
-from gui.suppliers import SuppliersPage
+from tkinter import ttk
 
+import customtkinter as ctk
 import matplotlib.pyplot as plt
+from PIL import Image
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 
 
@@ -16,7 +11,6 @@ from backend import (
     get_today_revenue,
     get_today_orders,
     get_inventory_value,
-    get_low_stock_products,
     get_recent_sales,
     get_dashboard_inventory_alerts,
     get_weekly_sales,
@@ -25,6 +19,12 @@ from backend import (
     get_today_business_snapshot,
     get_today_customer_loyalty_snapshot
 )
+
+from gui.billing import BillingPage
+from gui.customers import CustomersPage
+from gui.products import ProductsPage
+from gui.reports import ReportsPage
+from gui.suppliers import SuppliersPage
 
 
 # -----------------------------
@@ -66,13 +66,6 @@ class ShingviSupermartApp(ctk.CTk):
         self.snapshot_customer_var = ctk.StringVar(value="0")
         self.snapshot_loyalty_var = ctk.StringVar(value="0")
 
-        # ==========================================
-        # Smooth Mouse Wheel Scrolling
-        # ==========================================
-        
-        self.bind_all("<MouseWheel>", self._smooth_scroll)      # Windows
-        self.bind_all("<Button-4>", self._smooth_scroll)        # Linux Scroll Up
-        self.bind_all("<Button-5>", self._smooth_scroll)        # Linux Scroll Down
         # -----------------------------
         # WINDOW SETTINGS
         # -----------------------------
@@ -82,8 +75,6 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.grid_columnconfigure(1, weight=1)
         self.grid_rowconfigure(0, weight=1)
-
-        self.clock_job = None
 
         # ==========================================================
         # GLOBAL TREEVIEW STYLE (Professional Tables)
@@ -271,11 +262,10 @@ class ShingviSupermartApp(ctk.CTk):
         self.reports_page.pack_forget()
 
         self.setup_global_shortcuts()
-        
+
         # Show Dashboard First
         self.show_dashboard()
         self.update_dashboard_clock()
-        self.protocol("WM_DELETE_WINDOW", self.close_app)
     # ==========================================================
     # SIDEBAR BUTTON
     # ==========================================================
@@ -312,7 +302,6 @@ class ShingviSupermartApp(ctk.CTk):
         page.grid_rowconfigure((0,1,2,3,4,5,6,7,8,9,10,11), weight=0)
         page.grid_columnconfigure(0, weight=1)
         page.grid_columnconfigure(1, weight=1)
-        page.grid_rowconfigure(4, weight=1)
 
         # =====================================================
         # PREMIUM DASHBOARD HEADER
@@ -1109,7 +1098,6 @@ class ShingviSupermartApp(ctk.CTk):
 
         self.load_dashboard()      # Keep this
 
-        self.update_dashboard_clock()
 
     def show_products(self):
 
@@ -1179,11 +1167,6 @@ class ShingviSupermartApp(ctk.CTk):
                 except Exception:
                     pass
 
-            # Remove global mouse bindings
-            self.unbind_all("<MouseWheel>")
-            self.unbind_all("<Button-4>")
-            self.unbind_all("<Button-5>")
-
             # Remove keyboard bindings
             self.unbind_all("<Return>")
             self.unbind_all("<plus>")
@@ -1197,6 +1180,20 @@ class ShingviSupermartApp(ctk.CTk):
             self.unbind_all("<F3>")
             self.unbind_all("<F4>")
             self.unbind_all("<F5>")
+
+            self.unbind_all("<Control-Key-1>")
+            self.unbind_all("<Control-Key-2>")
+            self.unbind_all("<Control-Key-3>")
+            self.unbind_all("<Control-Key-4>")
+            self.unbind_all("<Control-Key-5>")
+            self.unbind_all("<Control-Key-6>")
+
+            self.unbind_all("<Alt-Key-b>")
+            self.unbind_all("<Alt-Key-p>")
+            self.unbind_all("<Alt-Key-c>")
+            self.unbind_all("<Alt-Key-s>")
+            self.unbind_all("<Alt-Key-r>")
+
 
         except Exception:
             pass
@@ -1212,16 +1209,6 @@ class ShingviSupermartApp(ctk.CTk):
     def change_theme(self, mode):
         ctk.set_appearance_mode(mode)
 
-    # ==========================================================
-    # CLOSE APPLICATION CLEANLY
-    # ==========================================================
-    def close_app(self):
-
-        if self.clock_job is not None:
-            self.after_cancel(self.clock_job)
-
-        self.destroy()
-        
     # ==========================================================
     # DASHBOARD LIVE CLOCK
     # ==========================================================
@@ -1256,41 +1243,6 @@ class ShingviSupermartApp(ctk.CTk):
                 self.update_dashboard_clock
             )
     # ==========================================================
-    # SMOOTH SCROLL (Works for all pages)
-    # ==========================================================
-    def _smooth_scroll(self, event):
-        try:
-            # Linux
-            if hasattr(event, "num"):
-                if event.num == 4:
-                    delta = -1
-                elif event.num == 5:
-                    delta = 1
-                else:
-                    delta = 0
-            else:
-                # Windows / macOS
-                delta = int(-event.delta / 120)
-
-            widget = self.focus_get()
-
-            while widget:
-                    # Skip drawing canvases (charts, graphs, etc.)
-                    if widget.winfo_class() == "Canvas":
-                        widget = widget.master
-                        continue
-
-                    # Scroll only real scrollable widgets
-                    if hasattr(widget, "yview_scroll"):
-                        widget.yview_scroll(delta, "units")
-                        break
-
-                    widget = widget.master
-
-        except Exception:
-            pass
-
-    # ==========================================================
     # LOAD DASHBOARD DATA
     # ==========================================================
     def load_dashboard(self):
@@ -1301,7 +1253,6 @@ class ShingviSupermartApp(ctk.CTk):
         # Inventory values come as a dictionary
         inventory = get_inventory_value()
 
-        purchase = float(inventory["purchase_value"] or 0)
         selling = float(inventory["selling_value"] or 0)
         profit = float(inventory["expected_profit"] or 0)
 
@@ -1338,7 +1289,7 @@ class ShingviSupermartApp(ctk.CTk):
                     "end",
                     values=(
                         f"INV{sale_id:04}",
-                        customer.title(),
+                        (customer or "Walk-in Customer").title(),
                         payment_icons.get(payment, payment),
                         f"₹{float(total):,.2f}"
                     )
@@ -1679,7 +1630,6 @@ class ShingviSupermartApp(ctk.CTk):
             lambda event: self.show_reports()
         )
 
-        return "break"
 # ==========================================================
 # RUN APP
 # ==========================================================

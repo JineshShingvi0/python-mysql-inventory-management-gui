@@ -11,10 +11,9 @@ from backend import (
 )
 
 
-class CustomersPage(ctk.CTkFrame):
-
+class CustomersPage(ctk.CTkScrollableFrame):
     def __init__(self, parent):
-        super().__init__(parent, fg_color="#F9FAFB")
+        super().__init__(parent, fg_color="#F9FAFB",corner_radius=0)
 
         self.build_ui()
         self.load_customers()
@@ -131,6 +130,10 @@ class CustomersPage(ctk.CTkFrame):
             "Points"
         )
 
+        # ==========================================================
+        # CUSTOMER TABLE
+        # ==========================================================
+
         self.table = ttk.Treeview(
             table_frame,
             columns=columns,
@@ -139,28 +142,120 @@ class CustomersPage(ctk.CTkFrame):
         )
 
         for column in columns:
-            self.table.heading(column, text=column)
+            self.table.heading(
+                column,
+                text=column
+            )
 
-        self.table.column("ID", width=60, anchor="center")
-        self.table.column("Name", width=170)
-        self.table.column("Phone", width=140)
-        self.table.column("Email", width=220)
-        self.table.column("Address", width=260)
-        self.table.column("Points", width=90, anchor="center")
+        self.table.column(
+            "ID",
+            width=60,
+            anchor="center",
+            stretch=False
+        )
 
-        self.table.bind("<<TreeviewSelect>>", self.load_customer_profile)
+        self.table.column(
+            "Name",
+            width=170,
+            stretch=False
+        )
 
-        scrollbar = ttk.Scrollbar(
+        self.table.column(
+            "Phone",
+            width=140,
+            stretch=False
+        )
+
+        self.table.column(
+            "Email",
+            width=220,
+            stretch=False
+        )
+
+        self.table.column(
+            "Address",
+            width=260,
+            stretch=False
+        )
+
+        self.table.column(
+            "Points",
+            width=90,
+            anchor="center",
+            stretch=False
+        )
+
+        self.table.bind(
+            "<<TreeviewSelect>>",
+            self.load_customer_profile
+        )
+
+        # ----------------------------------------------------------
+        # Configure table container
+        # ----------------------------------------------------------
+
+        table_frame.grid_rowconfigure(
+            0,
+            weight=1
+        )
+
+        table_frame.grid_rowconfigure(
+            1,
+            weight=0
+        )
+
+        table_frame.grid_columnconfigure(
+            0,
+            weight=1
+        )
+
+        table_frame.grid_columnconfigure(
+            1,
+            weight=0
+        )
+
+        # ----------------------------------------------------------
+        # Scrollbars
+        # ----------------------------------------------------------
+
+        vertical_scrollbar = ttk.Scrollbar(
             table_frame,
             orient="vertical",
             command=self.table.yview
         )
 
-        self.table.configure(yscrollcommand=scrollbar.set)
+        horizontal_scrollbar = ttk.Scrollbar(
+            table_frame,
+            orient="horizontal",
+            command=self.table.xview
+        )
 
-        self.table.pack(side="left", fill="both", expand=True)
-        scrollbar.pack(side="right", fill="y")
+        self.table.configure(
+            yscrollcommand=vertical_scrollbar.set,
+            xscrollcommand=horizontal_scrollbar.set
+        )
 
+        # ----------------------------------------------------------
+        # Place table + scrollbars
+        # ----------------------------------------------------------
+
+        self.table.grid(
+            row=0,
+            column=0,
+            sticky="nsew"
+        )
+
+        vertical_scrollbar.grid(
+            row=0,
+            column=1,
+            sticky="ns"
+        )
+
+        horizontal_scrollbar.grid(
+            row=1,
+            column=0,
+            sticky="ew"
+        )
         # ==========================================================
         # CUSTOMER PROFILE PANEL
         # ==========================================================
@@ -238,11 +333,34 @@ class CustomersPage(ctk.CTkFrame):
 
         for col in columns:
             self.history_table.heading(col, text=col)
-            self.history_table.column("Sale ID", width=55, anchor="center", stretch=False)
-            self.history_table.column("Date", width=95, anchor="center", stretch=True)
-            self.history_table.column("Payment", width=75, anchor="center", stretch=True)
-            self.history_table.column("Total", width=90, anchor="e", stretch=True)
 
+        self.history_table.column(
+            "Sale ID",
+            width=55,
+            anchor="center",
+            stretch=False
+        )
+
+        self.history_table.column(
+            "Date",
+            width=95,
+            anchor="center",
+            stretch=True
+        )
+
+        self.history_table.column(
+            "Payment",
+            width=75,
+            anchor="center",
+            stretch=True
+        )
+
+        self.history_table.column(
+            "Total",
+            width=90,
+            anchor="e",
+            stretch=True
+        )
         history_style = ttk.Style()
 
         history_style.configure(
@@ -269,40 +387,28 @@ class CustomersPage(ctk.CTkFrame):
         self.history_table.pack(side="left", fill="both", expand=True)
         history_scroll.pack(side="right", fill="y")
 
+    def populate_customer_table(self, customers):
 
-        # Table Style
-        style = ttk.Style()
+        for row in self.table.get_children():
+            self.table.delete(row)
 
-        style.theme_use("default")
-
-        style.configure(
-            "Treeview",
-            rowheight=34,
-            font=("Poppins", 12),
-            background="white",
-            fieldbackground="white"
-        )
-
-        style.configure(
-            "Treeview.Heading",
-            font=("Poppins", 12, "bold"),
-            background="#065F46",
-            foreground="white"
-        )
-
+        for customer in customers:
+            self.table.insert(
+                "",
+                "end",
+                values=customer
+            )
     # ==========================================================
     # LOAD CUSTOMERS
     # ==========================================================
 
     def load_customers(self):
 
-        for row in self.table.get_children():
-            self.table.delete(row)
-
         customers = get_all_customers()
 
-        for customer in customers:
-            self.table.insert("", "end", values=customer)
+        self.populate_customer_table(
+            customers
+        )
 
         self.customer_count_label.configure(
             text=f"{len(customers)} Customers Registered"
@@ -318,16 +424,14 @@ class CustomersPage(ctk.CTkFrame):
 
         keyword = self.search_var.get().strip()
 
-        for row in self.table.get_children():
-            self.table.delete(row)
-
-        if keyword == "":
-            customers = get_all_customers()
-        else:
+        if keyword:
             customers = search_customers(keyword)
+        else:
+            customers = get_all_customers()
 
-        for customer in customers:
-            self.table.insert("", "end", values=customer)
+        self.populate_customer_table(
+            customers
+        )
 
         self.customer_count_label.configure(
             text=f"{len(customers)} Customers Found"
@@ -339,49 +443,77 @@ class CustomersPage(ctk.CTkFrame):
 
     def load_customer_profile(self, event=None):
 
-            selected = self.table.selection()
+        selected = self.table.selection()
 
-            if not selected:
-                return
+        if not selected:
+            return
 
-            customer_id = self.table.item(selected[0])["values"][0]
+        customer_id = self.table.item(selected[0])["values"][0]
 
-            summary = get_customer_summary(customer_id)
-            history = get_customer_purchase_history(customer_id)
+        summary = get_customer_summary(customer_id)
+        history = get_customer_purchase_history(customer_id)
 
-            # ---------- Summary ----------
-            self.profile_name.set(summary["name"])
-            self.profile_phone.set(summary["phone"])
-            self.profile_points.set(str(summary["loyalty_points"]))
-            self.profile_orders.set(str(summary["total_orders"]))
-            self.profile_spent.set(f"₹{float(summary['total_spent']):.2f}")
+        # ---------- Summary ----------
+        self.profile_name.set(summary["name"])
+        self.profile_phone.set(summary["phone"])
+        self.profile_points.set(str(summary["loyalty_points"]))
+        self.profile_orders.set(str(summary["total_orders"]))
+        self.profile_spent.set(f"₹{float(summary['total_spent']):.2f}")
 
-            if summary["last_purchase"]:
-                self.profile_last_purchase.set(
-                    summary["last_purchase"].strftime("%d %b %Y")
+        if summary["last_purchase"]:
+            self.profile_last_purchase.set(
+                summary["last_purchase"].strftime("%d %b %Y")
+            )
+        else:
+            self.profile_last_purchase.set("No Purchases")
+
+        # ---------- Purchase History ----------
+        for row in self.history_table.get_children():
+            self.history_table.delete(row)
+
+        for sale in history:
+
+            sale_id, sale_date, payment, discount, gst, total = sale
+            self.history_table.insert(
+                "",
+                "end",
+                values=(
+                    sale_id,
+                    sale_date.strftime("%d-%m-%Y"),
+                    payment,
+                    f"₹{float(total):.2f}"
                 )
-            else:
-                self.profile_last_purchase.set("No Purchases")
+            )
 
-            # ---------- Purchase History ----------
-            for row in self.history_table.get_children():
-                self.history_table.delete(row)
+    def create_customer_field(
+        self,
+        parent,
+        title,
+        variable
+    ):
 
-            for sale in history:
+        ctk.CTkLabel(
+            parent,
+            text=title,
+            font=("Poppins", 13, "bold")
+        ).pack(
+            anchor="w",
+            padx=30,
+            pady=(8, 3)
+        )
 
-                sale_id, sale_date, payment, discount, gst, total = sale
+        entry = ctk.CTkEntry(
+            parent,
+            textvariable=variable,
+            width=420,
+            height=38
+        )
 
-                self.history_table.insert(
-                    "",
-                    "end",
-                    values=(
-                        sale_id,
-                        sale_date.strftime("%d-%m-%Y"),
-                        payment,
-                        f"₹{float(total):.2f}"
-                    )
-                )
+        entry.pack()
 
+        return entry
+
+    
     # ==========================================================
     # ADD CUSTOMER POPUP
     # ==========================================================
@@ -406,27 +538,30 @@ class CustomersPage(ctk.CTkFrame):
         email_var = ctk.StringVar()
         address_var = ctk.StringVar()
 
-        def field(title, variable):
 
-            ctk.CTkLabel(
-                popup,
-                text=title,
-                font=("Poppins",13,"bold")
-            ).pack(anchor="w", padx=30, pady=(8,3))
+        self.create_customer_field(
+            popup,
+            "Customer Name",
+            name_var
+        )
 
-            entry = ctk.CTkEntry(
-                popup,
-                textvariable=variable,
-                width=420,
-                height=38
-            )
+        self.create_customer_field(
+            popup,
+            "Phone Number",
+            phone_var
+        )
 
-            entry.pack()
+        self.create_customer_field(
+            popup,
+            "Email",
+            email_var
+        )
 
-        field("Customer Name", name_var)
-        field("Phone Number", phone_var)
-        field("Email", email_var)
-        field("Address", address_var)
+        self.create_customer_field(
+            popup,
+            "Address",
+            address_var
+        )
 
         status = ctk.CTkLabel(
             popup,
@@ -437,37 +572,49 @@ class CustomersPage(ctk.CTkFrame):
 
         def save_customer():
 
-            if name_var.get()=="" or phone_var.get()=="":
+            name = name_var.get().strip()
+            phone = phone_var.get().strip()
+            email = email_var.get().strip()
+            address = address_var.get().strip()
+
+            if not name or not phone:
+
                 status.configure(
                     text="Name and Phone are required.",
                     text_color="red"
                 )
+
                 return
 
-            if len(phone_var.get()) != 10:
+            if not phone.isdigit() or len(phone) != 10:
+
                 status.configure(
                     text="Phone number must contain 10 digits.",
                     text_color="red"
                 )
+
                 return
 
             try:
+
                 add_customer(
-                    name_var.get().strip(),
-                    phone_var.get().strip(),
-                    email_var.get().strip(),
-                    address_var.get().strip()
+                    name,
+                    phone,
+                    email,
+                    address
                 )
 
-                popup.destroy()
-                self.load_customers()
+            except Exception as error:
 
-            except Exception:
                 status.configure(
-                    text="Phone number already exists.",
+                    text=f"Unable to save customer: {error}",
                     text_color="red"
                 )
 
+                return
+
+            popup.destroy()
+            self.load_customers()
         ctk.CTkButton(
             popup,
             text="Save Customer",
@@ -487,6 +634,12 @@ class CustomersPage(ctk.CTkFrame):
         selected = self.table.selection()
 
         if not selected:
+
+            messagebox.showwarning(
+                "No Customer Selected",
+                "Please select a customer first."
+            )
+
             return
 
         values = self.table.item(selected[0])["values"]
@@ -511,36 +664,76 @@ class CustomersPage(ctk.CTkFrame):
         email_var = ctk.StringVar(value=values[3])
         address_var = ctk.StringVar(value=values[4])
 
-        def field(title, variable):
+        self.create_customer_field(
+            popup,
+            "Customer Name",
+            name_var
+        )
 
-            ctk.CTkLabel(
-                popup,
-                text=title,
-                font=("Poppins",13,"bold")
-            ).pack(anchor="w", padx=30, pady=(8,3))
+        self.create_customer_field(
+            popup,
+            "Phone Number",
+            phone_var
+        )
 
-            entry = ctk.CTkEntry(
-                popup,
-                textvariable=variable,
-                width=420,
-                height=38
-            )
-            entry.pack()
+        self.create_customer_field(
+            popup,
+            "Email",
+            email_var
+        )
 
-        field("Customer Name", name_var)
-        field("Phone Number", phone_var)
-        field("Email", email_var)
-        field("Address", address_var)
+        self.create_customer_field(
+            popup,
+            "Address",
+            address_var
+        )
 
         def save_update():
 
-            update_customer(
-                customer_id,
-                name_var.get(),
-                phone_var.get(),
-                email_var.get(),
-                address_var.get()
-            )
+            name = name_var.get().strip()
+            phone = phone_var.get().strip()
+            email = email_var.get().strip()
+            address = address_var.get().strip()
+
+            if not name or not phone:
+
+                messagebox.showwarning(
+                    "Invalid Customer",
+                    "Name and Phone are required.",
+                    parent=popup
+                )
+
+                return
+
+            if not phone.isdigit() or len(phone) != 10:
+
+                messagebox.showwarning(
+                    "Invalid Phone",
+                    "Phone number must contain 10 digits.",
+                    parent=popup
+                )
+
+                return
+
+            try:
+
+                update_customer(
+                    customer_id,
+                    name,
+                    phone,
+                    email,
+                    address
+                )
+
+            except Exception as error:
+
+                messagebox.showerror(
+                    "Update Failed",
+                    f"Unable to update customer.\n\n{error}",
+                    parent=popup
+                )
+
+                return
 
             popup.destroy()
             self.load_customers()
@@ -564,9 +757,18 @@ class CustomersPage(ctk.CTkFrame):
         selected = self.table.selection()
 
         if not selected:
+
+            messagebox.showwarning(
+                "No Customer Selected",
+                "Please select a customer first."
+            )
+
             return
 
-        values = self.table.item(selected[0])["values"]
+        values = self.table.item(
+            selected[0],
+            "values"
+        )
 
         confirm = messagebox.askyesno(
             "Delete Customer",
@@ -576,6 +778,24 @@ class CustomersPage(ctk.CTkFrame):
         if not confirm:
             return
 
-        delete_customer(values[0])
+        try:
+
+            delete_customer(
+                values[0]
+            )
+
+        except Exception as error:
+
+            messagebox.showerror(
+                "Delete Failed",
+                f"Unable to delete customer.\n\n{error}"
+            )
+
+            return
 
         self.load_customers()
+
+        messagebox.showinfo(
+            "Customer Deleted",
+            f"Customer '{values[1]}' deleted successfully."
+        )

@@ -547,10 +547,6 @@ class SuppliersPage(ctk.CTkScrollableFrame):
             values[0]
         )
 
-        self.load_supplier_purchase_history(
-            supplier_id
-        )
-                
         self.detail_name.set(
             values[1]
         )
@@ -568,6 +564,10 @@ class SuppliersPage(ctk.CTkScrollableFrame):
         )
 
         try:
+
+            self.load_supplier_purchase_history(
+                supplier_id
+            )
 
             summary = get_supplier_summary(
                 supplier_id
@@ -681,22 +681,14 @@ class SuppliersPage(ctk.CTkScrollableFrame):
                 )
             )
 
-
     # ==========================================================
-    # LOAD SUPPLIERS
+    # POPULATE SUPPLIER TABLE
     # ==========================================================
 
-    def load_suppliers(self):
+    def populate_supplier_table(self, suppliers):
 
         for row in self.table.get_children():
-
             self.table.delete(row)
-
-        suppliers = get_all_suppliers()
-
-        self.supplier_count_label.configure(
-            text=f"{len(suppliers)} Suppliers Registered"
-        )
 
         for supplier in suppliers:
 
@@ -722,6 +714,24 @@ class SuppliersPage(ctk.CTkScrollableFrame):
                     notes or ""
                 )
             )
+    # ==========================================================
+    # LOAD SUPPLIERS
+    # ==========================================================
+
+    def load_suppliers(self):
+
+        suppliers = get_all_suppliers()
+
+        self.populate_supplier_table(
+            suppliers
+        )
+
+        self.supplier_count_label.configure(
+            text=f"{len(suppliers)} Suppliers Registered"
+        )
+
+        self.search_var.set("")
+
 
     # ==========================================================
     # LIVE SEARCH
@@ -729,54 +739,61 @@ class SuppliersPage(ctk.CTkScrollableFrame):
 
     def live_search(self, event=None):
 
-        keyword = (
-            self.search_var.get()
-            .strip()
-            .lower()
+        keyword = self.search_var.get().strip()
+
+        if keyword:
+            suppliers = search_suppliers(
+                keyword
+            )
+        else:
+            suppliers = get_all_suppliers()
+
+        self.populate_supplier_table(
+            suppliers
         )
-
-        if not keyword:
-
-            self.load_suppliers()
-            return
-
-        suppliers = search_suppliers(
-            keyword
-        )
-
-        for row in self.table.get_children():
-
-            self.table.delete(row)
 
         self.supplier_count_label.configure(
             text=f"{len(suppliers)} Suppliers Found"
         )
 
-        for supplier in suppliers:
+    # ==========================================================
+    # SUPPLIER FORM FIELD HELPER
+    # ==========================================================
 
-            (
-                supplier_id,
-                name,
-                phone,
-                email,
-                address,
-                notes,
-                created_at
-            ) = supplier
+    def create_supplier_field(
+        self,
+        parent,
+        label,
+        variable,
+        placeholder=""
+    ):
 
-            self.table.insert(
-                "",
-                "end",
-                values=(
-                    supplier_id,
-                    name.title(),
-                    phone or "",
-                    email or "",
-                    address or "",
-                    notes or ""
-                )
-            )
+        ctk.CTkLabel(
+            parent,
+            text=label,
+            font=("Poppins", 13, "bold"),
+            text_color="#374151"
+        ).pack(
+            anchor="w",
+            padx=20,
+            pady=(8, 4)
+        )
 
+        entry = ctk.CTkEntry(
+            parent,
+            textvariable=variable,
+            height=40,
+            placeholder_text=placeholder
+        )
+
+        entry.pack(
+            fill="x",
+            padx=20,
+            pady=(0, 8)
+        )
+
+        return entry
+    
     # ==========================================================
     # ADD SUPPLIER
     # ==========================================================
@@ -831,64 +848,34 @@ class SuppliersPage(ctk.CTkScrollableFrame):
         phone_var = ctk.StringVar()
         email_var = ctk.StringVar()
         address_var = ctk.StringVar()
-        notes_var = ctk.StringVar()
 
-        def add_field(
-            label,
-            variable,
-            placeholder=""
-        ):
-
-            ctk.CTkLabel(
-                content,
-                text=label,
-                font=("Poppins", 13, "bold"),
-                text_color="#374151"
-            ).pack(
-                anchor="w",
-                padx=20,
-                pady=(8, 4)
-            )
-
-            entry = ctk.CTkEntry(
-                content,
-                textvariable=variable,
-                height=40,
-                placeholder_text=placeholder
-            )
-
-            entry.pack(
-                fill="x",
-                padx=20,
-                pady=(0, 8)
-            )
-
-            return entry
-
-        name_entry = add_field(
+        name_entry = self.create_supplier_field(
+            content,
             "Supplier Name *",
             name_var,
             "ABC Distributors"
         )
 
-        add_field(
+        self.create_supplier_field(
+            content,
             "Phone",
             phone_var,
             "9876543210"
         )
 
-        add_field(
+        self.create_supplier_field(
+            content,
             "Email",
             email_var,
             "supplier@example.com"
         )
 
-        add_field(
+        self.create_supplier_field(
+            content,
             "Address",
             address_var,
             "Pune"
         )
-
         ctk.CTkLabel(
             content,
             text="Notes",
@@ -1101,56 +1088,27 @@ class SuppliersPage(ctk.CTkScrollableFrame):
             value=values[4]
         )
 
-        notes_var = ctk.StringVar(
-            value=values[5]
-        )
 
-        def add_field(
-            label,
-            variable
-        ):
-
-            ctk.CTkLabel(
-                content,
-                text=label,
-                font=("Poppins", 13, "bold"),
-                text_color="#374151"
-            ).pack(
-                anchor="w",
-                padx=20,
-                pady=(8, 4)
-            )
-
-            entry = ctk.CTkEntry(
-                content,
-                textvariable=variable,
-                height=40
-            )
-
-            entry.pack(
-                fill="x",
-                padx=20,
-                pady=(0, 8)
-            )
-
-            return entry
-
-        name_entry = add_field(
+        name_entry = self.create_supplier_field(
+            content,
             "Supplier Name *",
             name_var
         )
 
-        add_field(
+        self.create_supplier_field(
+            content,
             "Phone",
             phone_var
         )
 
-        add_field(
+        self.create_supplier_field(
+            content,
             "Email",
             email_var
         )
 
-        add_field(
+        self.create_supplier_field(
+            content,
             "Address",
             address_var
         )

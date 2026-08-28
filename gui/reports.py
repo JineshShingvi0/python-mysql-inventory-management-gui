@@ -280,15 +280,6 @@ class ReportsPage(ctk.CTkScrollableFrame):
         )
 
         self.payment_canvas.pack(pady=(10,20))
-
-        self.cash_progress.configure(progress_color="#16A34A")
-        self.upi_progress.configure(progress_color="#2563EB")
-        self.card_progress.configure(progress_color="#9333EA")
-
-        self.cash_progress.set(0)
-        self.upi_progress.set(0)
-        self.card_progress.set(0)
-
         
         separator = ctk.CTkFrame(
             self,
@@ -620,11 +611,11 @@ class ReportsPage(ctk.CTkScrollableFrame):
         ).pack(side="left")
 
         # Search Box
-        self.search_var = ctk.StringVar()
+        self.sales_search_var = ctk.StringVar()
 
         search_entry = ctk.CTkEntry(
             header,
-            textvariable=self.search_var,
+            textvariable=self.sales_search_var,
             placeholder_text="Search customer...",
             width=220,
             height=36
@@ -632,7 +623,10 @@ class ReportsPage(ctk.CTkScrollableFrame):
 
         search_entry.pack(side="right")
 
-        search_entry.bind("<KeyRelease>", lambda event: self.load_reports())
+        search_entry.bind(
+            "<KeyRelease>",
+            lambda event: self.load_sales_ledger()
+        )
 
         # Ledger Table
         columns = (
@@ -1998,6 +1992,57 @@ class ReportsPage(ctk.CTkScrollableFrame):
         )
 
         quantity_entry.focus_set()
+
+    # ==========================================================
+    # LOAD SALES LEDGER
+    # ==========================================================
+
+    def load_sales_ledger(self):
+
+        for row in self.sales_table.get_children():
+            self.sales_table.delete(row)
+
+        sales = get_sales_history()
+
+        search_text = (
+            self.sales_search_var.get()
+            .strip()
+            .lower()
+        )
+
+        for (
+            sale_id,
+            customer,
+            payment,
+            total,
+            sale_date
+        ) in sales:
+
+            customer_name = (
+                customer.title()
+                if customer
+                else "Walk-in Customer"
+            )
+
+            if (
+                search_text
+                and search_text not in customer_name.lower()
+            ):
+                continue
+
+            invoice = f"INV{sale_id:04d}"
+
+            self.sales_table.insert(
+                "",
+                "end",
+                values=(
+                    invoice,
+                    customer_name,
+                    payment,
+                    f"₹{float(total):.2f}",
+                    sale_date.strftime("%d-%b-%Y")
+                )
+            )
     # ==========================================================
     # LOAD REPORTS
     # ==========================================================
@@ -2180,34 +2225,7 @@ class ReportsPage(ctk.CTkScrollableFrame):
         # SALES LEDGER
         # =====================================================
 
-        for row in self.sales_table.get_children():
-            self.sales_table.delete(row)
-
-        sales = get_sales_history()
-
-        search_text = self.search_var.get().strip().lower()
-
-        for sale_id, customer, payment, total, sale_date in sales:
-
-            customer_name = customer.title() if customer else "Walk-in Customer"
-
-            if search_text:
-                if search_text not in customer_name.lower():
-                    continue
-
-            invoice = f"INV{sale_id:04d}"
-
-            self.sales_table.insert(
-                "",
-                "end",
-                values=(
-                    invoice,
-                    customer_name,
-                    payment,
-                    f"₹{float(total):.2f}",
-                    sale_date.strftime("%d-%b-%Y")
-                )
-            )
+        self.load_sales_ledger()
 
         # =====================================================
         # RETURN HISTORY
@@ -2325,11 +2343,16 @@ class ReportsPage(ctk.CTkScrollableFrame):
             revenue[month-1] = float(amount)
 
         canvas_width = 720
-        canvas_height = 220
 
         self.chart_canvas.configure(width=canvas_width)
 
-        max_value = max(revenue) if max(revenue) > 0 else 1
+        max_revenue = max(revenue)
+
+        max_value = (
+            max_revenue
+            if max_revenue > 0
+            else 1
+        )
 
         bar_width = 35
         spacing = 20
