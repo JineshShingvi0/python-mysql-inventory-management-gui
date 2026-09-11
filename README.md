@@ -1,138 +1,101 @@
-# 🛒 Shingvi Supermart — Inventory Management & POS System
+# 🛒 Shingvi Supermart — Inventory Management & POS Billing Software
 
-A desktop-based **Inventory Management and Point of Sale (POS) system** built with Python, CustomTkinter, and MySQL.
+A professional **Inventory Management and Point of Sale (POS)** desktop application built using **Python, CustomTkinter, MySQL, and ReportLab**.
 
-The application is designed for retail-store management and combines **billing, inventory, customers, suppliers, loyalty rewards, barcode management, sales analytics, purchases, and returns** in one interface.
+Designed for retail supermarkets and stores to manage products, billing, inventory, suppliers, customers, and loyalty rewards in one place.
 
 ---
 
 ## ✨ Features
 
-### 🏠 Dashboard
-- Today's revenue
-- Orders today
-- Inventory value
-- Expected inventory profit
-- Inventory health
-- Low-stock and out-of-stock alerts
-- Sales target tracking
-- Recent sales
-- Best-selling products
-- Weekly revenue analytics
-- Smart business insights
-- Live date and time
-- Store status indicator
+### 🛍 Billing & POS
 
-### 📦 Product Management
-- Add products
-- Update products
-- Delete unused products
-- Search by product name, category, or barcode
-- Purchase price and selling price management
-- Minimum-stock levels
-- Stock quantity management
-- Internal barcode generation
-- Barcode assignment and replacement
-- Barcode copying
-- Barcode preview
-- Barcode PNG generation
-- Barcode label generation
+* Barcode scanner support.
+* Fast billing with keyboard shortcuts.
+* Customer phone auto-fetch.
+* Loyalty points earning & redemption.
+* Multiple payment methods (Cash, UPI, Card).
+* GST Enable / Disable support.
+* Professional Thermal Printer (80mm POS) invoices.
+* QR Code payment on invoice.
 
-### 🛒 Billing / POS
-- Customer billing
-- Multiple products per bill
-- Quantity management
-- Cash, UPI, and Card payment methods
-- GST calculation
-- Percentage-based discounts
-- Live bill summary
-- Live receipt preview
-- Barcode scanning
-- Automatic stock deduction
-- Invoice PDF generation
-- Keyboard shortcuts for faster billing
+### 📦 Inventory Management
 
-### ⭐ Loyalty Program
-- Customers earn loyalty points based on bill value
-- **1 loyalty point for every ₹100 of final bill amount**
-- **50 loyalty points = ₹10 discount**
-- Redemption restricted to multiples of 50 points
-- Customer point balance displayed during billing
-- Loyalty redemption and earning handled as part of the billing transaction
+* Product management.
+* Barcode generation.
+* Low stock alerts.
+* Stock movement history.
+* Purchase price & selling price tracking.
+* Purchase management.
 
-### 👤 Customer Management
-- Add customers
-- Update customer information
-- Delete customers when allowed
-- Search by name or phone number
-- Loyalty point tracking
-- Customer profile
-- Total orders
-- Total spending
-- Last purchase date
-- Customer purchase history
+### 👥 Customer Management
 
-### 🏭 Supplier Management
-- Add suppliers
-- Update suppliers
-- Delete suppliers when allowed
-- Search suppliers
-- Supplier details
-- Total purchase value
-- Purchase transaction count
-- Total units supplied
-- Last purchase information
-- Supplier purchase history
+* Customer database.
+* Loyalty points system.
+* Purchase history.
+* Total spending tracking.
 
-### 📊 Reports & Analytics
-- Daily revenue
-- Daily orders
-- Product count
-- Low-stock products
-- Cash / UPI / Card analytics
-- Payment distribution
-- Inventory health score
-- Inventory purchase value
-- Inventory selling value
-- Expected inventory profit
-- Today's purchases
-- Purchase transaction count
-- Today's gross profit
-- Profit margin
-- Best-selling products
-- Top customers
-- Monthly revenue chart
-- Weekly sales data
-- Stock movement history
-- Sales ledger
-- Purchase history
-- Return history
-- Sales returns and refunds
+### 🚚 Supplier Management
 
-### ↩ Returns / Refunds
-- Select an invoice from the sales ledger
-- View sold and returned quantities
-- Calculate refundable quantity
-- Process product returns
-- Automatically return stock to inventory
-- Record return history
-- Update stock movement history
-- Return-aware profit calculations
+* Supplier records.
+* Purchase entries.
+* Purchase history.
+
+### 📊 Dashboard & Reports
+
+* Today's sales.
+* Weekly sales graph.
+* Inventory value.
+* Top-selling products.
+* Healthy / Low / Out-of-stock indicators.
+* Business snapshot.
 
 ---
 
-## 🧱 Technology Stack
+## 🛠 Tech Stack
 
-- **Python 3**
-- **CustomTkinter** — GUI
-- **Tkinter ttk** — tables and widgets
-- **MySQL** — database
-- **mysql-connector-python** — MySQL connectivity
-- **Pillow** — image and barcode preview handling
-- **python-barcode** — barcode generation
-- **ReportLab** — invoice and barcode-label PDF generation
+| Technology    | Usage                 |
+| ------------- | --------------------- |
+| Python 3.11   | Core Application      |
+| CustomTkinter | Modern Desktop GUI    |
+| MySQL         | Database              |
+| ReportLab     | PDF & Thermal Invoice |
+| Pillow        | Image Handling        |
+| Git & GitHub  | Version Control       |
 
 ---
+
+## ⌨ Keyboard Shortcuts
+
+| Shortcut | Action                       |
+| -------- | ---------------------------- |
+| F2       | Product Selection            |
+| F3       | Barcode Scanner              |
+| F4       | Quantity                     |
+| F5       | Customer Phone               |
+| Enter    | Add Product                  |
+| + / -    | Increase / Decrease Quantity |
+| Delete   | Remove Item                  |
+| Ctrl + B | Generate Bill                |
+
+---
+
+## 🚀 Future Roadmap
+
+* Settings page for business customization.
+* WhatsApp invoice sharing.
+* Automatic thermal printer printing.
+* Backup & Restore.
+* Multi-store support.
+
+---
+
+## 👨‍💻 Developed By
+
+**Jinesh Shingvi**
+
+Python Developer • Automation Enthusiast • Inventory & Billing Solutions
+
 
 ## 📁 Project Structure
 
